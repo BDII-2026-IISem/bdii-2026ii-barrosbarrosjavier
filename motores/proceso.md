@@ -598,3 +598,23 @@ CREATE TABLE venta (
 ![Tabla venta creada en PostgreSQL](reporte/postgres-09-tabla-venta.png)
 
 **Resultado:** la tabla se creó sin errores (`Execute time: 0,01s`), sin Foreign Key para `cliente_id` — no existe una entidad `Cliente` en el modelo de 10 tablas, mismo criterio aplicado en la Sección 1 y en MySQL Workbench.
+
+### 2.10 Creación de la tabla `venta_detalle`
+
+```sql
+CREATE TABLE venta_detalle (
+  id SERIAL PRIMARY KEY,
+  cabecera_id INT NOT NULL REFERENCES venta(id),
+  item_id INT NOT NULL REFERENCES producto(id),
+  cantidad DECIMAL(10,2) NOT NULL,
+  valor_unitario DECIMAL(10,2) NOT NULL,
+  total DECIMAL(10,2) NOT NULL,
+  observaciones TEXT
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla venta_detalle creada en PostgreSQL](reporte/postgres-10-tabla-venta-detalle.png)
+
+**Resultado:** la tabla se creó sin errores (`Execute time: 0,013s`), con las Foreign Keys `cabecera_id → venta` e `item_id → producto`, igual que en la Sección 1 de MySQL.
