@@ -839,3 +839,45 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables final confirmando las 10 tablas](reporte/postgres-visual-12-verificacion-final.png)
 
 **Resultado:** para verificar que el modelo construido manualmente en pgAdmin (Secciones 3.1 a 3.11) coincide con lo realmente creado en el servidor, se generó un diagrama ERD directamente desde `hornoraiz_visual`. El resultado confirma las 10 tablas y las 8 relaciones esperadas, con `promocion` sin ningún conector, tal como fue definido. `pg_tables` confirma las mismas 10 tablas, idénticas en nombre a las de la Sección 2.1.
+
+## 4. Base de Datos SQL Server
+
+### 4.1 Limpieza de tablas existentes
+
+```sql
+USE master;
+GO
+ALTER DATABASE hornoraiz SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+GO
+DROP DATABASE hornoraiz;
+GO
+CREATE DATABASE hornoraiz;
+GO
+USE hornoraiz;
+GO
+```
+
+**Evidencia (imagen):**
+
+![Base de datos recreada correctamente en SQL Server](reporte/mssql-01-base-recreada.png)
+
+**Resultado:** se optó por eliminar y recrear la base de datos completa (`DROP DATABASE` / `CREATE DATABASE`) en vez de borrar tabla por tabla, ya que la base traía 11 tablas residuales de la instalación previa del motor, incluyendo una tabla puente `promocion_producto` que no forma parte del modelo. Fue necesario `ALTER DATABASE ... SET SINGLE_USER WITH ROLLBACK IMMEDIATE` para forzar el cierre de sesiones activas antes del `DROP`.
+
+### 4.2 Creación de la tabla `producto`
+
+```sql
+CREATE TABLE producto (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  sku VARCHAR(50) NOT NULL UNIQUE,
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  precio DECIMAL(10,2) NOT NULL,
+  is_active BIT NOT NULL DEFAULT 1
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla producto creada en SQL Server](reporte/mssql-02-tabla-producto.png)
+
+**Resultado:** la tabla se creó sin errores.
