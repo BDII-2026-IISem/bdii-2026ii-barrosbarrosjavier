@@ -515,3 +515,21 @@ CREATE TRIGGER trg_receta_updated_at
 ![Prueba de INSERT y UPDATE mostrando el cambio de updated_at](reporte/postgres-05-receta-trigger-test.png)
 
 **Resultado:** la tabla se creó sin errores, respetando la Foreign Key hacia `producto`. Se verificó el trigger `trg_receta_updated_at` mediante una fila de prueba: tras un `UPDATE`, `updated_at` cambió de `06:00:52.015` a `06:01:39` mientras `created_at` permaneció igual, confirmando el equivalente funcional de `ON UPDATE CURRENT_TIMESTAMP` de MySQL. La fila de prueba fue eliminada después de la verificación.
+
+### 2.6 Creación de la tabla `receta_insumo`
+
+```sql
+CREATE TABLE receta_insumo (
+  id SERIAL PRIMARY KEY,
+  principal_id INT NOT NULL REFERENCES receta(id),
+  relacionado_id INT NOT NULL REFERENCES insumo(id),
+  datos_relacion VARCHAR(255),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla receta_insumo creada en PostgreSQL](reporte/postgres-06-tabla-receta-insumo.png)
+
+**Resultado:** la tabla se creó sin errores (`Execute time: 0,077s`), resolviendo la relación N:M entre `receta` e `insumo`, igual que en la Sección 1 de MySQL.
