@@ -691,3 +691,17 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando producto creada](reporte/postgres-visual-02-producto-tablas.png)
 
 **Resultado:** se creó la tabla `producto` mediante la interfaz gráfica de pgAdmin (diálogo Create-Table), sin escribir SQL manualmente. El script generado coincide con el `CREATE TABLE producto` de la Sección 2.1 (código), incluyendo la restricción `UNIQUE` sobre `sku`.
+
+#### 3.3 Creación de la tabla `insumo`
+
+![Columnas de insumo configuradas en pgAdmin](reporte/postgres-visual-03-insumo-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE insumo generado](reporte/postgres-visual-03-insumo-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando insumo creada](reporte/postgres-visual-03-insumo-tablas.png)
+
+**Resultado:** se creó la tabla `insumo` mediante pgAdmin, con la restricción `UNIQUE` correctamente aplicada sobre `codigo` (corregida de un intento inicial que la había apuntado por error a `stock_minimo`). Coincide con el `CREATE TABLE insumo` de la Sección 2.1.
