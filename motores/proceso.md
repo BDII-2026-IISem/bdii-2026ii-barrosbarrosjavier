@@ -533,3 +533,27 @@ CREATE TABLE receta_insumo (
 ![Tabla receta_insumo creada en PostgreSQL](reporte/postgres-06-tabla-receta-insumo.png)
 
 **Resultado:** la tabla se creó sin errores (`Execute time: 0,077s`), resolviendo la relación N:M entre `receta` e `insumo`, igual que en la Sección 1 de MySQL.
+
+### 2.7 Creación de la tabla `lote_produccion`
+
+```sql
+CREATE TABLE lote_produccion (
+  id SERIAL PRIMARY KEY,
+  receta_id INT NOT NULL REFERENCES receta(id),
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER trg_lote_produccion_updated_at
+  BEFORE UPDATE ON lote_produccion
+  FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+```
+
+**Evidencia (imagen):**
+
+![Tabla lote_produccion y trigger creados en PostgreSQL](reporte/postgres-07-tabla-lote-produccion.png)
+
+**Resultado:** la tabla se creó sin errores (`Execute time: 0,036s`), reutilizando la función `actualizar_updated_at()` ya verificada en `receta` para el mismo comportamiento de `updated_at` automático.
