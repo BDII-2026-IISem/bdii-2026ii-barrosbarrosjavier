@@ -111,3 +111,25 @@ CREATE TABLE receta_insumo (
 ![Tabla receta_insumo creada](reporte/mysql-05-tabla-receta-insumo.png)
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,253s`), resolviendo la relación N:M entre `receta` e `insumo`.
+
+### 1.6 Creación de la tabla `lote_produccion`
+ 
+```sql
+CREATE TABLE lote_produccion (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  receta_id INT NOT NULL,
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (receta_id) REFERENCES receta(id)
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla lote_produccion creada](reporte/mysql-06-tabla-lote-produccion.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,16s`).
+ 
