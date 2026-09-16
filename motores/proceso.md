@@ -132,4 +132,28 @@ CREATE TABLE lote_produccion (
 ![Tabla lote_produccion creada](reporte/mysql-06-tabla-lote-produccion.png)
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,16s`).
+
+### 1.7 Creación de la tabla `movimiento_insumo`
+ 
+```sql
+CREATE TABLE movimiento_insumo (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  lote_produccion_id INT,
+  insumo_id INT NOT NULL,
+  tipo VARCHAR(50) NOT NULL,
+  fecha DATETIME NOT NULL,
+  cantidad DECIMAL(10, 2) NOT NULL,
+  observaciones TEXT,
+  estado VARCHAR(30) NOT NULL,
+  FOREIGN KEY (lote_produccion_id) REFERENCES lote_produccion(id),
+  FOREIGN KEY (insumo_id) REFERENCES insumo(id)
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla movimiento_insumo creada](reporte/mysql-07-tabla-movimiento-insumo.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,134s`).
+ 
  
