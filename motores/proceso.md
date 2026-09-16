@@ -91,3 +91,23 @@ CREATE TABLE receta (
 ![Tabla receta creada](reporte/mysql-04-tabla-receta.png)
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,328s`), respetando la llave foránea hacia `producto`.
+
+### 1.5 Creación de la tabla `receta_insumo`
+ 
+```sql
+CREATE TABLE receta_insumo (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  principal_id INT NOT NULL,
+  relacionado_id INT NOT NULL,
+  datos_relacion VARCHAR(255),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  FOREIGN KEY (principal_id) REFERENCES receta(id),
+  FOREIGN KEY (relacionado_id) REFERENCES insumo(id)
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla receta_insumo creada](reporte/mysql-05-tabla-receta-insumo.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,253s`), resolviendo la relación N:M entre `receta` e `insumo`.
