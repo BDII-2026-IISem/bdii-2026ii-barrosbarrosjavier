@@ -468,3 +468,22 @@ CREATE TABLE producto (
 ![Tabla producto creada en PostgreSQL](reporte/postgres-03-tabla-producto.png)
 
 **Resultado:** la tabla se creó sin errores (`Execute time: 0,071s`).
+
+### 2.4 Creación de la tabla `insumo`
+
+```sql
+CREATE TABLE insumo (
+  id SERIAL PRIMARY KEY,
+  codigo VARCHAR(50) NOT NULL UNIQUE,
+  nombre VARCHAR(100) NOT NULL,
+  unidad_medida VARCHAR(30) NOT NULL,
+  stock_minimo DECIMAL(10,2) NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla insumo creada en PostgreSQL](reporte/postgres-04-tabla-insumo.png)
+
+**Resultado:** la tabla se creó sin errores (`Execute time: 0,021s`).
