@@ -300,3 +300,17 @@ SHOW TABLES;
 ![SHOW TABLES tras crear receta](reporte/mysql-visual-04-receta-show-tables.png)
 
 **Resultado:** se cargaron las columnas replicando el `CREATE TABLE receta` de la Sección 1, incluyendo la cláusula `ON UPDATE CURRENT_TIMESTAMP` en `updated_at`. Se definió la Foreign Key `producto_id → producto(id)`, visible como conector en el diagrama EER. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma tres tablas creadas hasta el momento (`producto`, `insumo`, `receta`).
+
+#### 2.5 Creación de la tabla `receta_insumo`
+
+![Columnas de receta_insumo configuradas en el editor](reporte/mysql-visual-05-receta_insumo-columnas.png)
+
+**Script SQL generado por el modelo:**
+
+![Script CREATE TABLE receta_insumo generado](reporte/mysql-visual-05-receta_insumo-script.png)
+
+**Evidencia de la creación (Forward Engineer):**
+
+![SHOW TABLES tras crear receta_insumo](reporte/mysql-visual-05-receta_insumo-show-tables.png)
+
+**Resultado:** se cargaron las columnas y las dos Foreign Keys (`principal_id → receta`, `relacionado_id → insumo`), resolviendo la relación `Receta N:M Insumo` del enunciado, igual que en la Sección 1. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma cuatro tablas creadas hasta el momento.
