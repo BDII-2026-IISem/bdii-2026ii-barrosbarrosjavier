@@ -198,3 +198,22 @@ CREATE TABLE venta_detalle (
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,113s`).
  
+ ### 1.10 Creación de la tabla `pago`
+ 
+```sql
+CREATE TABLE pago (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  referencia_tipo VARCHAR(50) NOT NULL,
+  referencia_id INT NOT NULL,
+  metodo VARCHAR(50) NOT NULL,
+  monto DECIMAL(10, 2) NOT NULL,
+  fecha DATETIME NOT NULL,
+  estado VARCHAR(30) NOT NULL
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla pago creada](reporte/mysql-10-tabla-pago.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,075s`).
