@@ -217,3 +217,23 @@ CREATE TABLE pago (
 ![Tabla pago creada](reporte/mysql-10-tabla-pago.png)
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,075s`).
+
+### 1.11 Creación de la tabla `promocion`
+ 
+```sql
+CREATE TABLE promocion (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla promocion creada](reporte/mysql-11-tabla-promocion.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,066s`).
+ 
