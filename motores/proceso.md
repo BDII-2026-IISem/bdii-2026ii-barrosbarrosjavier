@@ -811,3 +811,21 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando pago creada](reporte/postgres-visual-10-pago-tablas.png)
 
 **Resultado:** se creó la tabla `pago` mediante pgAdmin, sin Foreign Key — `referencia_id` es polimórfica, igual que en la Sección 2.1.
+
+#### 3.11 Creación de la tabla `promocion`
+
+![Columnas de promocion configuradas en pgAdmin](reporte/postgres-visual-11-promocion-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE promocion generado](reporte/postgres-visual-11-promocion-script.png)
+
+**Trigger aplicado:**
+
+![CREATE TRIGGER trg_promocion_updated_at ejecutado sin errores](reporte/postgres-visual-11-promocion-trigger.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando promocion creada](reporte/postgres-visual-11-promocion-tablas.png)
+
+**Resultado:** se creó la tabla `promocion` mediante pgAdmin, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, con el trigger `trg_promocion_updated_at` reutilizando la función `actualizar_updated_at()`. Respeta la misma decisión documentada en la Sección 1 de MySQL.
