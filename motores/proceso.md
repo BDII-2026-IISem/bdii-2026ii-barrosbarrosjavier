@@ -677,3 +677,17 @@ SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
 #### Conclusión
 
 Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL mediante código SQL en DBeaver. A diferencia de MySQL, fue necesario implementar una función y triggers (`actualizar_updated_at`) para replicar el comportamiento de `ON UPDATE CURRENT_TIMESTAMP`, verificado mediante pruebas de INSERT/UPDATE sobre `receta`. Con esto queda cerrada la Sección 2.1 (código); en la Sección 2.2 se recreará el mismo modelo de forma visual usando pgAdmin 4.
+
+#### 3.2 Creación de la tabla `producto`
+
+![Columnas de producto configuradas en pgAdmin](reporte/postgres-visual-02-producto-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE producto generado](reporte/postgres-visual-02-producto-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando producto creada](reporte/postgres-visual-02-producto-tablas.png)
+
+**Resultado:** se creó la tabla `producto` mediante la interfaz gráfica de pgAdmin (diálogo Create-Table), sin escribir SQL manualmente. El script generado coincide con el `CREATE TABLE producto` de la Sección 2.1 (código), incluyendo la restricción `UNIQUE` sobre `sku`.
