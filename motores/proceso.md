@@ -70,3 +70,24 @@ CREATE TABLE insumo (
 ![Tabla insumo creada](reporte/mysql-03-tabla-insumo.png)
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,287s`).
+
+### 1.4 Creación de la tabla `receta`
+ 
+```sql
+CREATE TABLE receta (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  producto_id INT NOT NULL,
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (producto_id) REFERENCES producto(id)
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla receta creada](reporte/mysql-04-tabla-receta.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,328s`), respetando la llave foránea hacia `producto`.
