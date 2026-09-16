@@ -155,5 +155,25 @@ CREATE TABLE movimiento_insumo (
 ![Tabla movimiento_insumo creada](reporte/mysql-07-tabla-movimiento-insumo.png)
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,134s`).
+
+### 1.8 Creación de la tabla `venta`
+ 
+```sql
+CREATE TABLE venta (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  cliente_id INT,
+  fecha DATETIME NOT NULL,
+  subtotal DECIMAL(10, 2) NOT NULL,
+  impuestos DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  total DECIMAL(10, 2) NOT NULL,
+  estado VARCHAR(30) NOT NULL
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla venta creada](reporte/mysql-08-tabla-venta.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,224s`).
  
  
