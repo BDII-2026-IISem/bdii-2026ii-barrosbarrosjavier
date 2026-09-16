@@ -236,4 +236,18 @@ CREATE TABLE promocion (
 ![Tabla promocion creada](reporte/mysql-11-tabla-promocion.png)
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,066s`).
+
+### 1.12 Verificación final
+
+```sql
+SHOW TABLES;
+```
+
+**Evidencia (imagen):**
+
+![Verificación final de las 10 tablas](reporte/mysql-12-show-tables-final.png)
+
+**Resultado:** `SHOW TABLES` devolvió las 10 tablas esperadas (`insumo`, `lote_produccion`, `movimiento_insumo`, `pago`, `producto`, `promocion`, `receta`, `receta_insumo`, `venta`, `venta_detalle`), confirmando que el modelo quedó completo tras crear las 11 sentencias, sin tablas puente adicionales.
+
+**Nota sobre la relación Promocion N:M Producto:** a diferencia de Receta N:M Insumo (resuelta explícitamente "mediante RecetaInsumo" en el enunciado), la narrativa del proyecto no especifica un mecanismo de resolución para esta relación, ni los atributos sugeridos para `Promocion` incluyen una columna de conexión. Se optó por mantener la tabla `promocion` exactamente como fue especificada, sin agregar columnas ni tablas adicionales, respetando el modelo entregado de forma literal.
  
