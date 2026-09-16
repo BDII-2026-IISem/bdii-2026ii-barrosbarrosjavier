@@ -51,3 +51,22 @@ CREATE TABLE producto (
 ![Tabla producto creada](reporte/mysql-02-tabla-producto.png)
 
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,132s`).
+
+### 1.3 Creación de la tabla `insumo`
+ 
+```sql
+CREATE TABLE insumo (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  codigo VARCHAR(50) NOT NULL UNIQUE,
+  nombre VARCHAR(100) NOT NULL,
+  unidad_medida VARCHAR(30) NOT NULL,
+  stock_minimo DECIMAL(10, 2) NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla insumo creada](reporte/mysql-03-tabla-insumo.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,287s`).
