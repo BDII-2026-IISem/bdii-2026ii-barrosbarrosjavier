@@ -661,3 +661,19 @@ CREATE TRIGGER trg_promocion_updated_at
 ![Tabla promocion y trigger creados en PostgreSQL](reporte/postgres-12-tabla-promocion.png)
 
 **Resultado:** la tabla se creó sin errores (`Execute time: 0,083s`), sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, respetando la misma decisión documentada en la Sección 1 de MySQL.
+
+### 2.13 Verificación final
+
+```sql
+SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename;
+```
+
+**Evidencia (imagen):**
+
+![Verificación final de las 10 tablas en PostgreSQL](reporte/postgres-13-verificacion-final.png)
+
+**Resultado:** la consulta devolvió las 10 tablas esperadas (`insumo`, `lote_produccion`, `movimiento_insumo`, `pago`, `producto`, `promocion`, `receta`, `receta_insumo`, `venta`, `venta_detalle`), confirmando que el modelo quedó completo, sin la tabla puente `promocion_producto` que existía por instalación previa.
+
+#### Conclusión
+
+Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL mediante código SQL en DBeaver. A diferencia de MySQL, fue necesario implementar una función y triggers (`actualizar_updated_at`) para replicar el comportamiento de `ON UPDATE CURRENT_TIMESTAMP`, verificado mediante pruebas de INSERT/UPDATE sobre `receta`. Con esto queda cerrada la Sección 2.1 (código); en la Sección 2.2 se recreará el mismo modelo de forma visual usando pgAdmin 4.
