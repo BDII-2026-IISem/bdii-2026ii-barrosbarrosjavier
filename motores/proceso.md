@@ -951,3 +951,36 @@ CREATE TABLE receta_insumo (
 ![Tabla receta_insumo creada en SQL Server](reporte/mssql-05-tabla-receta-insumo.png)
 
 **Resultado:** la tabla se creó sin errores, resolviendo la relación N:M entre `receta` e `insumo` con las Foreign Keys `principal_id` y `relacionado_id`.
+
+### 4.6 Creación de la tabla `lote_produccion`
+
+```sql
+CREATE TABLE lote_produccion (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  receta_id INT NOT NULL REFERENCES receta(id),
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  is_active BIT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT GETDATE(),
+  updated_at DATETIME NOT NULL DEFAULT GETDATE()
+);
+GO
+
+CREATE TRIGGER trg_lote_produccion_updated_at
+ON lote_produccion
+AFTER UPDATE
+AS
+BEGIN
+  UPDATE lote_produccion
+  SET updated_at = GETDATE()
+  FROM lote_produccion
+  INNER JOIN inserted ON lote_produccion.id = inserted.id;
+END;
+GO
+```
+
+**Evidencia (imagen):**
+
+![Tabla lote_produccion y trigger creados en SQL Server](reporte/mssql-06-tabla-lote-produccion.png)
+
+**Resultado:** la tabla se creó sin errores, con la Foreign Key hacia `receta` y el trigger `trg_lote_produccion_updated_at`.
