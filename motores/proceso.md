@@ -933,3 +933,21 @@ GO
 ![Tabla receta y trigger creados en SQL Server](reporte/mssql-04-tabla-receta.png)
 
 **Resultado:** la tabla se creó sin errores, con la Foreign Key hacia `producto` y el trigger `trg_receta_updated_at` (`AFTER UPDATE`, ya que SQL Server no soporta `BEFORE UPDATE` como PostgreSQL), replicando el equivalente funcional de `ON UPDATE CURRENT_TIMESTAMP` de MySQL.
+
+### 4.5 Creación de la tabla `receta_insumo`
+
+```sql
+CREATE TABLE receta_insumo (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  principal_id INT NOT NULL REFERENCES receta(id),
+  relacionado_id INT NOT NULL REFERENCES insumo(id),
+  datos_relacion VARCHAR(255),
+  is_active BIT NOT NULL DEFAULT 1
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla receta_insumo creada en SQL Server](reporte/mssql-05-tabla-receta-insumo.png)
+
+**Resultado:** la tabla se creó sin errores, resolviendo la relación N:M entre `receta` e `insumo` con las Foreign Keys `principal_id` y `relacionado_id`.
