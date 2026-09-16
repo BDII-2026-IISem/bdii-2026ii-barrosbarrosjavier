@@ -769,3 +769,17 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando movimiento_insumo creada](reporte/postgres-visual-07-movimiento_insumo-tablas.png)
 
 **Resultado:** se creó la tabla `movimiento_insumo` mediante pgAdmin, con `lote_produccion_id` nullable y ambas Foreign Keys resueltas correctamente. Coincide con el `CREATE TABLE movimiento_insumo` de la Sección 2.1.
+
+#### 3.8 Creación de la tabla `venta`
+
+![Columnas de venta configuradas en pgAdmin](reporte/postgres-visual-08-venta-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE venta generado](reporte/postgres-visual-08-venta-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando venta creada](reporte/postgres-visual-08-venta-tablas.png)
+
+**Resultado:** se creó la tabla `venta` mediante pgAdmin, sin Foreign Key para `cliente_id` — no existe una entidad `Cliente` en el modelo de 10 tablas, mismo criterio aplicado en la Sección 2.1. Coincide con el `CREATE TABLE venta` de la Sección 1 de MySQL.
