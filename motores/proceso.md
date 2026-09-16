@@ -723,3 +723,17 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando receta creada](reporte/postgres-visual-04-receta-tablas.png)
 
 **Resultado:** se creó la tabla `receta` mediante pgAdmin, con la Foreign Key hacia `producto` y el trigger `trg_receta_updated_at`, reutilizando la función `actualizar_updated_at()` ya existente en este servidor local. Coincide con el `CREATE TABLE receta` de la Sección 2.1.
+
+#### 3.5 Creación de la tabla `receta_insumo`
+
+![Columnas y Foreign Keys de receta_insumo configuradas en pgAdmin](reporte/postgres-visual-05-receta_insumo-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE receta_insumo generado](reporte/postgres-visual-05-receta_insumo-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando receta_insumo creada](reporte/postgres-visual-05-receta_insumo-tablas.png)
+
+**Resultado:** se creó la tabla `receta_insumo` mediante pgAdmin, resolviendo la relación N:M entre `receta` e `insumo` con las Foreign Keys `principal_id` y `relacionado_id`. Se corrigió un error de tecleo inicial (`datos_relacionado` → `datos_relacion`) antes del cierre. Coincide con el `CREATE TABLE receta_insumo` de la Sección 2.1.
