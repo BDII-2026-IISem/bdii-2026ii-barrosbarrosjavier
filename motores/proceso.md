@@ -286,3 +286,17 @@ SHOW TABLES;
 ![SHOW TABLES tras crear insumo](reporte/mysql-visual-03-insumo-show-tables.png)
 
 **Resultado:** se cargaron las columnas `id` (PK, AI), `codigo` (UQ), `nombre`, `unidad_medida`, `stock_minimo` (default `0`) e `is_active` (default `1`), replicando exactamente el `CREATE TABLE insumo` de la Sección 1. Se ejecutó el Forward Engineer individual para esta tabla, y `SHOW TABLES` sobre `hornoraiz_visual` confirma ambas tablas creadas hasta el momento (`producto`, `insumo`).
+
+#### 2.4 Creación de la tabla `receta`
+
+![Columnas de receta configuradas en el editor](reporte/mysql-visual-04-receta-columnas.png)
+
+**Script SQL generado por el modelo:**
+
+![Script CREATE TABLE receta generado](reporte/mysql-visual-04-receta-script.png)
+
+**Evidencia de la creación (Forward Engineer):**
+
+![SHOW TABLES tras crear receta](reporte/mysql-visual-04-receta-show-tables.png)
+
+**Resultado:** se cargaron las columnas replicando el `CREATE TABLE receta` de la Sección 1, incluyendo la cláusula `ON UPDATE CURRENT_TIMESTAMP` en `updated_at`. Se definió la Foreign Key `producto_id → producto(id)`, visible como conector en el diagrama EER. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma tres tablas creadas hasta el momento (`producto`, `insumo`, `receta`).
