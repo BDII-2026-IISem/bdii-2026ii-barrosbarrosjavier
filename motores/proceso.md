@@ -176,4 +176,25 @@ CREATE TABLE venta (
  
 **Resultado:** La tabla se creó sin errores (`Execute time: 0,224s`).
  
+ ### 1.9 Creación de la tabla `venta_detalle`
+ 
+```sql
+CREATE TABLE venta_detalle (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  cabecera_id INT NOT NULL,
+  item_id INT NOT NULL,
+  cantidad DECIMAL(10, 2) NOT NULL,
+  valor_unitario DECIMAL(10, 2) NOT NULL,
+  total DECIMAL(10, 2) NOT NULL,
+  observaciones TEXT,
+  FOREIGN KEY (cabecera_id) REFERENCES venta(id),
+  FOREIGN KEY (item_id) REFERENCES producto(id)
+);
+```
+ 
+**Evidencia (imagen):**
+ 
+![Tabla venta_detalle creada](reporte/mysql-09-tabla-venta-detalle.png)
+ 
+**Resultado:** La tabla se creó sin errores (`Execute time: 0,113s`).
  
