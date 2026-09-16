@@ -1045,3 +1045,23 @@ CREATE TABLE venta_detalle (
 ![Tabla venta_detalle creada en SQL Server](reporte/mssql-09-tabla-venta-detalle.png)
 
 **Resultado:** la tabla se creó sin errores, con las Foreign Keys `cabecera_id → venta` e `item_id → producto`.
+
+### 4.10 Creación de la tabla `pago`
+
+```sql
+CREATE TABLE pago (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  referencia_tipo VARCHAR(50) NOT NULL,
+  referencia_id INT NOT NULL,
+  metodo VARCHAR(50) NOT NULL,
+  monto DECIMAL(10,2) NOT NULL,
+  fecha DATETIME NOT NULL,
+  estado VARCHAR(30) NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla pago creada en SQL Server](reporte/mssql-10-tabla-pago.png)
+
+**Resultado:** la tabla se creó sin errores, sin Foreign Key — `referencia_id` es polimórfica, igual que en los demás motores.
