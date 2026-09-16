@@ -1065,3 +1065,35 @@ CREATE TABLE pago (
 ![Tabla pago creada en SQL Server](reporte/mssql-10-tabla-pago.png)
 
 **Resultado:** la tabla se creó sin errores, sin Foreign Key — `referencia_id` es polimórfica, igual que en los demás motores.
+
+### 4.11 Creación de la tabla `promocion`
+
+```sql
+CREATE TABLE promocion (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  is_active BIT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT GETDATE(),
+  updated_at DATETIME NOT NULL DEFAULT GETDATE()
+);
+GO
+
+CREATE TRIGGER trg_promocion_updated_at
+ON promocion
+AFTER UPDATE
+AS
+BEGIN
+  UPDATE promocion
+  SET updated_at = GETDATE()
+  FROM promocion
+  INNER JOIN inserted ON promocion.id = inserted.id;
+END;
+GO
+```
+
+**Evidencia (imagen):**
+
+![Tabla promocion y trigger creados en SQL Server](reporte/mssql-11-tabla-promocion.png)
+
+**Resultado:** la tabla se creó sin errores, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, con el trigger `trg_promocion_updated_at`. Respeta la misma decisión documentada en los demás motores.
