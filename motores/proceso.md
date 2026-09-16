@@ -411,3 +411,60 @@ SHOW TABLES;
 #### Conclusión
 
 Con esto se finaliza la creación de la base de datos `hornoraiz` de forma visual en MySQL Workbench, replicando exactamente las 10 tablas, las 8 relaciones (todas menos `promocion`, sin conector por decisión ya documentada) y los tipos de datos definidos en la Sección 1, verificado tabla por tabla mediante Forward Engineer individual según lo exigido por el docente.
+
+## 2. Base de Datos PostgreSQL
+
+### 2.1 Limpieza de tablas existentes
+
+```sql
+DROP TABLE IF EXISTS venta_detalle;
+DROP TABLE IF EXISTS pago;
+DROP TABLE IF EXISTS venta;
+DROP TABLE IF EXISTS movimiento_insumo;
+DROP TABLE IF EXISTS lote_produccion;
+DROP TABLE IF EXISTS receta_insumo;
+DROP TABLE IF EXISTS receta;
+DROP TABLE IF EXISTS promocion_producto;
+DROP TABLE IF EXISTS promocion;
+DROP TABLE IF EXISTS insumo;
+DROP TABLE IF EXISTS producto;
+```
+
+**Evidencia (imagen):**
+
+![Tablas eliminadas correctamente en PostgreSQL](reporte/postgres-01-tablas-eliminadas.png)
+
+**Resultado:** se ejecutó el script completo con `Alt+X`. Se incluyó `promocion_producto`, una tabla puente residual de una instalación previa del motor que no forma parte del modelo de 10 tablas. Todas las tablas quedaron eliminadas sin errores de dependencia, respetando el orden inverso de las Foreign Keys.
+
+### 2.2 Función `actualizar_updated_at`
+
+```sql
+CREATE FUNCTION actualizar_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Resultado:** se creó una función reutilizable que replica el comportamiento de `ON UPDATE CURRENT_TIMESTAMP` de MySQL, ya que PostgreSQL no tiene un equivalente directo en la definición de columna. Esta función se asocia mediante triggers `BEFORE UPDATE` a cada tabla que lo requiera (`receta`, `lote_produccion`, `promocion`).
+
+### 2.3 Creación de la tabla `producto`
+
+```sql
+CREATE TABLE producto (
+  id SERIAL PRIMARY KEY,
+  sku VARCHAR(50) NOT NULL UNIQUE,
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  precio DECIMAL(10,2) NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla producto creada en PostgreSQL](reporte/postgres-03-tabla-producto.png)
+
+**Resultado:** la tabla se creó sin errores (`Execute time: 0,071s`).
