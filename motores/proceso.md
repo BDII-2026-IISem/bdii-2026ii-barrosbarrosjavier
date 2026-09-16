@@ -797,3 +797,17 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando venta_detalle creada](reporte/postgres-visual-09-venta_detalle-tablas.png)
 
 **Resultado:** se creó la tabla `venta_detalle` mediante pgAdmin, con las Foreign Keys `cabecera_id → venta` e `item_id → producto`. Coincide con el `CREATE TABLE venta_detalle` de la Sección 2.1.
+
+#### 3.10 Creación de la tabla `pago`
+
+![Columnas de pago configuradas en pgAdmin](reporte/postgres-visual-10-pago-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE pago generado](reporte/postgres-visual-10-pago-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando pago creada](reporte/postgres-visual-10-pago-tablas.png)
+
+**Resultado:** se creó la tabla `pago` mediante pgAdmin, sin Foreign Key — `referencia_id` es polimórfica, igual que en la Sección 2.1.
