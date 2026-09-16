@@ -557,3 +557,24 @@ CREATE TRIGGER trg_lote_produccion_updated_at
 ![Tabla lote_produccion y trigger creados en PostgreSQL](reporte/postgres-07-tabla-lote-produccion.png)
 
 **Resultado:** la tabla se creó sin errores (`Execute time: 0,036s`), reutilizando la función `actualizar_updated_at()` ya verificada en `receta` para el mismo comportamiento de `updated_at` automático.
+
+### 2.8 Creación de la tabla `movimiento_insumo`
+
+```sql
+CREATE TABLE movimiento_insumo (
+  id SERIAL PRIMARY KEY,
+  lote_produccion_id INT REFERENCES lote_produccion(id),
+  insumo_id INT NOT NULL REFERENCES insumo(id),
+  tipo VARCHAR(50) NOT NULL,
+  fecha TIMESTAMP NOT NULL,
+  cantidad DECIMAL(10,2) NOT NULL,
+  observaciones TEXT,
+  estado VARCHAR(30) NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla movimiento_insumo creada en PostgreSQL](reporte/postgres-08-tabla-movimiento-insumo.png)
+
+**Resultado:** la tabla se creó sin errores (`Execute time: 0,02s`), con `lote_produccion_id` nullable, igual que en la Sección 1 de MySQL.
