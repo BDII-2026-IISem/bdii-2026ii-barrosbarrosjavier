@@ -783,3 +783,17 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando venta creada](reporte/postgres-visual-08-venta-tablas.png)
 
 **Resultado:** se creó la tabla `venta` mediante pgAdmin, sin Foreign Key para `cliente_id` — no existe una entidad `Cliente` en el modelo de 10 tablas, mismo criterio aplicado en la Sección 2.1. Coincide con el `CREATE TABLE venta` de la Sección 1 de MySQL.
+
+#### 3.9 Creación de la tabla `venta_detalle`
+
+![Columnas y Foreign Keys de venta_detalle configuradas en pgAdmin](reporte/postgres-visual-09-venta_detalle-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE venta_detalle generado](reporte/postgres-visual-09-venta_detalle-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando venta_detalle creada](reporte/postgres-visual-09-venta_detalle-tablas.png)
+
+**Resultado:** se creó la tabla `venta_detalle` mediante pgAdmin, con las Foreign Keys `cabecera_id → venta` e `item_id → producto`. Coincide con el `CREATE TABLE venta_detalle` de la Sección 2.1.
