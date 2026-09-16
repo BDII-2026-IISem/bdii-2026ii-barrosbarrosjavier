@@ -272,3 +272,17 @@ SHOW TABLES;
 ![SHOW TABLES tras crear producto](reporte/mysql-visual-02-producto-show-tables.png)
 
 **Resultado:** se cargaron las columnas `id` (PK, AI), `sku` (UQ), `nombre`, `descripcion`, `precio` y `is_active` (default `1`), replicando exactamente el `CREATE TABLE producto` de la Sección 1. La evidencia de creación real contra el servidor se documenta al final de esta sección, junto con el Forward Engineer de las 10 tablas.
+
+#### 2.3 Creación de la tabla `insumo`
+
+![Columnas de insumo configuradas en el editor](reporte/mysql-visual-03-insumo-columnas.png)
+
+**Script SQL generado por el modelo:**
+
+![Script CREATE TABLE insumo generado](reporte/mysql-visual-03-insumo-script.png)
+
+**Evidencia de la creación (Forward Engineer):**
+
+![SHOW TABLES tras crear insumo](reporte/mysql-visual-03-insumo-show-tables.png)
+
+**Resultado:** se cargaron las columnas `id` (PK, AI), `codigo` (UQ), `nombre`, `unidad_medida`, `stock_minimo` (default `0`) e `is_active` (default `1`), replicando exactamente el `CREATE TABLE insumo` de la Sección 1. Se ejecutó el Forward Engineer individual para esta tabla, y `SHOW TABLES` sobre `hornoraiz_visual` confirma ambas tablas creadas hasta el momento (`producto`, `insumo`).
