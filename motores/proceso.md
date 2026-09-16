@@ -370,3 +370,17 @@ SHOW TABLES;
 ![SHOW TABLES tras crear venta_detalle](reporte/mysql-visual-09-venta_detalle-show-tables.png)
 
 **Resultado:** se cargaron las columnas y las dos Foreign Keys (`cabecera_id → venta`, `item_id → producto`), replicando exactamente el `CREATE TABLE venta_detalle` de la Sección 1. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma ocho tablas creadas hasta el momento.
+
+#### 2.10 Creación de la tabla `pago`
+
+![Columnas de pago configuradas en el editor](reporte/mysql-visual-10-pago-columnas.png)
+
+**Script SQL generado por el modelo:**
+
+![Script CREATE TABLE pago generado](reporte/mysql-visual-10-pago-script.png)
+
+**Evidencia de la creación (Forward Engineer):**
+
+![SHOW TABLES tras crear pago](reporte/mysql-visual-10-pago-show-tables.png)
+
+**Resultado:** se cargaron las columnas sin Foreign Key — `referencia_id` es polimórfica (puede apuntar a distintas entidades según `referencia_tipo`), igual que en la Sección 1. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma nueve tablas creadas hasta el momento.
