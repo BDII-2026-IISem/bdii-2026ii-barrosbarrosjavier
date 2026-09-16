@@ -247,7 +247,28 @@ SHOW TABLES;
 
 ![Verificación final de las 10 tablas](reporte/mysql-12-show-tables-final.png)
 
-**Resultado:** `SHOW TABLES` devolvió las 10 tablas esperadas (`insumo`, `lote_produccion`, `movimiento_insumo`, `pago`, `producto`, `promocion`, `receta`, `receta_insumo`, `venta`, `venta_detalle`), confirmando que el modelo quedó completo tras crear las 11 sentencias, sin tablas puente adicionales.
+**Resultado:** `SHOW TABLES` devolvió las 10 tablas esperadas (`insumo`, `lote_produccion`, `movimiento_insumo`, `pago`, `producto`, `promocion`, `receta`, `receta_insumo`, `venta`, `venta_detalle`), confirmando que el modelo quedó completo tras crear las 10 sentencias, sin tablas puente adicionales.
 
 **Nota sobre la relación Promocion N:M Producto:** a diferencia de Receta N:M Insumo (resuelta explícitamente "mediante RecetaInsumo" en el enunciado), la narrativa del proyecto no especifica un mecanismo de resolución para esta relación, ni los atributos sugeridos para `Promocion` incluyen una columna de conexión. Se optó por mantener la tabla `promocion` exactamente como fue especificada, sin agregar columnas ni tablas adicionales, respetando el modelo entregado de forma literal.
  
+ ### 2. Creación de la base de datos de forma visual por MySQL Workbench
+
+#### 2.1 Creación de la base de datos `hornoraiz_visual`
+
+![Schema hornoraiz_visual creado](reporte/mysql-visual-01-schema.png)
+
+**Resultado:** se creó el schema `hornoraiz_visual` dentro del EER Model de MySQL Workbench, como destino separado del `hornoraiz` ya evaluado en la Sección 1, para no sobrescribir esa evidencia.
+
+#### 2.2 Creación de la tabla `producto`
+
+![Columnas de producto configuradas en el editor](reporte/mysql-visual-02-producto-columnas.png)
+
+**Script SQL generado por el modelo:**
+
+![Script CREATE TABLE producto generado](reporte/mysql-visual-02-producto-script.png)
+
+**Evidencia de la creación (Forward Engineer):**
+
+![SHOW TABLES tras crear producto](reporte/mysql-visual-02-producto-show-tables.png)
+
+**Resultado:** se cargaron las columnas `id` (PK, AI), `sku` (UQ), `nombre`, `descripcion`, `precio` y `is_active` (default `1`), replicando exactamente el `CREATE TABLE producto` de la Sección 1. La evidencia de creación real contra el servidor se documenta al final de esta sección, junto con el Forward Engineer de las 10 tablas.
