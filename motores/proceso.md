@@ -1097,3 +1097,19 @@ GO
 ![Tabla promocion y trigger creados en SQL Server](reporte/mssql-11-tabla-promocion.png)
 
 **Resultado:** la tabla se creó sin errores, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, con el trigger `trg_promocion_updated_at`. Respeta la misma decisión documentada en los demás motores.
+
+### 4.12 Verificación final
+
+```sql
+SELECT name FROM sys.tables ORDER BY name;
+```
+
+**Evidencia (imagen):**
+
+![Verificación final de las 10 tablas en SQL Server](reporte/mssql-12-verificacion-final.png)
+
+**Resultado:** la consulta devolvió las 10 tablas esperadas (`insumo`, `lote_produccion`, `movimiento_insumo`, `pago`, `producto`, `promocion`, `receta`, `receta_insumo`, `venta`, `venta_detalle`), confirmando que el modelo quedó completo, sin la tabla puente `promocion_producto` que existía por instalación previa.
+
+#### Conclusión
+
+Con esto se finaliza la creación de la base de datos `hornoraiz` en SQL Server mediante código SQL en DBeaver. A diferencia de MySQL y similar a PostgreSQL, fue necesario implementar triggers `AFTER UPDATE` (SQL Server no soporta `BEFORE UPDATE`) para replicar el comportamiento de `updated_at` automático en `receta`, `lote_produccion` y `promocion`. Con esto queda cerrada la Sección 4.1 (código); en la Sección 4.2 se recreará el mismo modelo de forma visual usando SQL Server Management Studio 20.
