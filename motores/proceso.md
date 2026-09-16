@@ -1113,3 +1113,23 @@ SELECT name FROM sys.tables ORDER BY name;
 #### Conclusión
 
 Con esto se finaliza la creación de la base de datos `hornoraiz` en SQL Server mediante código SQL en DBeaver. A diferencia de MySQL y similar a PostgreSQL, fue necesario implementar triggers `AFTER UPDATE` (SQL Server no soporta `BEFORE UPDATE`) para replicar el comportamiento de `updated_at` automático en `receta`, `lote_produccion` y `promocion`. Con esto queda cerrada la Sección 4.1 (código); en la Sección 4.2 se recreará el mismo modelo de forma visual usando SQL Server Management Studio 20.
+
+## 5. Base de Datos SQL Server — Parte Visual (SQL Server Management Studio)
+
+### 5.1 Instalación y configuración
+
+Se instaló **SQL Server 2025 Evaluation Edition** de forma local en Windows (instancia por defecto `MSSQLSERVER`, autenticación de Windows), junto con **SQL Server Management Studio** para la parte gráfica.
+
+**Evidencia (imagen):**
+
+![Instalación de SQL Server 2025 completada exitosamente](reporte/mssql-visual-00-instalacion.png)
+
+**Nota metodológica:** al igual que en MySQL Workbench y pgAdmin 4, se optó por instalar el motor localmente en Windows en vez de conectar SSMS directamente al SQL Server de la VM, para mantener el mismo patrón de trabajo en los tres motores con parte visual.
+
+### 5.2 Creación de la base de datos `hornoraiz_visual`
+
+**Evidencia (imagen):**
+
+![Base de datos hornoraiz_visual creada en SSMS](reporte/mssql-visual-01-database-creada.png)
+
+**Resultado:** se creó la base de datos `hornoraiz_visual` mediante el asistente gráfico "Nueva base de datos" de SSMS, sin escribir código SQL, como destino separado de la base `hornoraiz` ya evaluada por código en la Sección 4.1.
