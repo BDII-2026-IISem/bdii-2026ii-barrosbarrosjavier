@@ -314,3 +314,17 @@ SHOW TABLES;
 ![SHOW TABLES tras crear receta_insumo](reporte/mysql-visual-05-receta_insumo-show-tables.png)
 
 **Resultado:** se cargaron las columnas y las dos Foreign Keys (`principal_id → receta`, `relacionado_id → insumo`), resolviendo la relación `Receta N:M Insumo` del enunciado, igual que en la Sección 1. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma cuatro tablas creadas hasta el momento.
+
+#### 2.6 Creación de la tabla `lote_produccion`
+
+![Columnas de lote_produccion configuradas en el editor](reporte/mysql-visual-06-lote_produccion-columnas.png)
+
+**Script SQL generado por el modelo:**
+
+![Script CREATE TABLE lote_produccion generado](reporte/mysql-visual-06-lote_produccion-script.png)
+
+**Evidencia de la creación (Forward Engineer):**
+
+![SHOW TABLES tras crear lote_produccion](reporte/mysql-visual-06-lote_produccion-show-tables.png)
+
+**Resultado:** se cargaron las columnas y la Foreign Key `receta_id → receta(id)`, incluyendo `ON UPDATE CURRENT_TIMESTAMP` en `updated_at` desde la primera configuración. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma cinco tablas creadas hasta el momento.
