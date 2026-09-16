@@ -755,3 +755,17 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando lote_produccion creada](reporte/postgres-visual-06-lote_produccion-tablas.png)
 
 **Resultado:** se creó la tabla `lote_produccion` mediante pgAdmin, con la Foreign Key hacia `receta` y el trigger `trg_lote_produccion_updated_at`, reutilizando la función `actualizar_updated_at()`. Se corrigió `descripcion` (faltaba la longitud `255`) antes del cierre. Coincide con el `CREATE TABLE lote_produccion` de la Sección 2.1.
+
+#### 3.7 Creación de la tabla `movimiento_insumo`
+
+![Columnas y Foreign Keys de movimiento_insumo configuradas en pgAdmin](reporte/postgres-visual-07-movimiento_insumo-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE movimiento_insumo generado](reporte/postgres-visual-07-movimiento_insumo-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando movimiento_insumo creada](reporte/postgres-visual-07-movimiento_insumo-tablas.png)
+
+**Resultado:** se creó la tabla `movimiento_insumo` mediante pgAdmin, con `lote_produccion_id` nullable y ambas Foreign Keys resueltas correctamente. Coincide con el `CREATE TABLE movimiento_insumo` de la Sección 2.1.
