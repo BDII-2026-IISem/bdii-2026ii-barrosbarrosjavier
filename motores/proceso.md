@@ -881,3 +881,22 @@ CREATE TABLE producto (
 ![Tabla producto creada en SQL Server](reporte/mssql-02-tabla-producto.png)
 
 **Resultado:** la tabla se creó sin errores.
+
+### 4.3 Creación de la tabla `insumo`
+
+```sql
+CREATE TABLE insumo (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  codigo VARCHAR(50) NOT NULL UNIQUE,
+  nombre VARCHAR(100) NOT NULL,
+  unidad_medida VARCHAR(30) NOT NULL,
+  stock_minimo DECIMAL(10,2) NOT NULL DEFAULT 0,
+  is_active BIT NOT NULL DEFAULT 1
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla insumo creada en SQL Server](reporte/mssql-03-tabla-insumo.png)
+
+**Resultado:** la tabla se creó sin errores.
