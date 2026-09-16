@@ -384,3 +384,30 @@ SHOW TABLES;
 ![SHOW TABLES tras crear pago](reporte/mysql-visual-10-pago-show-tables.png)
 
 **Resultado:** se cargaron las columnas sin Foreign Key — `referencia_id` es polimórfica (puede apuntar a distintas entidades según `referencia_tipo`), igual que en la Sección 1. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma nueve tablas creadas hasta el momento.
+
+#### 2.11 Creación de la tabla `promocion`
+
+![Columnas de promocion configuradas en el editor](reporte/mysql-visual-11-promocion-columnas.png)
+
+**Script SQL generado por el modelo:**
+
+![Script CREATE TABLE promocion generado](reporte/mysql-visual-11-promocion-script.png)
+
+**Evidencia de la creación (Forward Engineer):**
+
+![SHOW TABLES tras crear promocion](reporte/mysql-visual-11-promocion-show-tables.png)
+
+**Resultado:** se cargaron las columnas sin ninguna Foreign Key ni conector en el diagrama, respetando la misma decisión documentada en la Sección 1 para la relación `Promocion N:M Producto`. Se ejecutó el Forward Engineer individual.
+
+#### 2.12 Verificación final
+
+**Diagrama EER obtenido por Reverse Engineer desde `hornoraiz_visual`:**
+
+![Diagrama EER reverse-engineered — 10 tablas](reporte/mysql-visual-12-diagrama-eer.png)
+
+![SHOW TABLES final sobre hornoraiz_visual — 10 tablas](reporte/mysql-visual-12-show-tables-final.png)
+
+**Resultado:** para verificar que el modelo construido manualmente en Workbench (Secciones 2.1 a 2.11) coincide con lo realmente creado en el servidor, se generó un diagrama EER por Reverse Engineer directamente desde `hornoraiz_visual`. El resultado confirma las 10 tablas y las 8 relaciones esperadas, con `promocion` sin ningún conector, tal como fue definido. `SHOW TABLES` confirma las mismas 10 tablas, idénticas en nombre a las de la Sección 1.
+#### Conclusión
+
+Con esto se finaliza la creación de la base de datos `hornoraiz` de forma visual en MySQL Workbench, replicando exactamente las 10 tablas, las 8 relaciones (todas menos `promocion`, sin conector por decisión ya documentada) y los tipos de datos definidos en la Sección 1, verificado tabla por tabla mediante Forward Engineer individual según lo exigido por el docente.
