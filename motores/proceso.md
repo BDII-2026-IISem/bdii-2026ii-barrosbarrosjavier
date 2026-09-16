@@ -342,3 +342,17 @@ SHOW TABLES;
 ![SHOW TABLES tras crear movimiento_insumo](reporte/mysql-visual-07-movimiento_insumo-show-tables.png)
 
 **Resultado:** se cargaron las columnas y las dos Foreign Keys (`lote_produccion_id → lote_produccion`, nullable; `insumo_id → insumo`, obligatoria), replicando exactamente el `CREATE TABLE movimiento_insumo` de la Sección 1. Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma seis tablas creadas hasta el momento.
+
+#### 2.8 Creación de la tabla `venta`
+
+![Columnas de venta configuradas en el editor](reporte/mysql-visual-08-venta-columnas.png)
+
+**Script SQL generado por el modelo:**
+
+![Script CREATE TABLE venta generado](reporte/mysql-visual-08-venta-script.png)
+
+**Evidencia de la creación (Forward Engineer):**
+
+![SHOW TABLES tras crear venta](reporte/mysql-visual-08-venta-show-tables.png)
+
+**Resultado:** se cargaron las columnas sin Foreign Key (`cliente_id` queda como columna simple, sin tabla `Cliente` en el modelo de 10 tablas). Se ejecutó el Forward Engineer individual y `SHOW TABLES` sobre `hornoraiz_visual` confirma siete tablas creadas hasta el momento.
