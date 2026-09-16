@@ -829,3 +829,13 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando promocion creada](reporte/postgres-visual-11-promocion-tablas.png)
 
 **Resultado:** se creó la tabla `promocion` mediante pgAdmin, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, con el trigger `trg_promocion_updated_at` reutilizando la función `actualizar_updated_at()`. Respeta la misma decisión documentada en la Sección 1 de MySQL.
+
+#### 3.12 Verificación final
+
+**Diagrama ERD obtenido desde `hornoraiz_visual` (pgAdmin ERD Tool):**
+
+![Diagrama ERD generado por pgAdmin — 10 tablas](reporte/postgres-visual-12-diagrama-erd.png)
+
+![Consulta pg_tables final confirmando las 10 tablas](reporte/postgres-visual-12-verificacion-final.png)
+
+**Resultado:** para verificar que el modelo construido manualmente en pgAdmin (Secciones 3.1 a 3.11) coincide con lo realmente creado en el servidor, se generó un diagrama ERD directamente desde `hornoraiz_visual`. El resultado confirma las 10 tablas y las 8 relaciones esperadas, con `promocion` sin ningún conector, tal como fue definido. `pg_tables` confirma las mismas 10 tablas, idénticas en nombre a las de la Sección 2.1.
