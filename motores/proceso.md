@@ -705,3 +705,21 @@ Con esto se finaliza la creación de la base de datos `hornoraiz` en PostgreSQL 
 ![Consulta pg_tables confirmando insumo creada](reporte/postgres-visual-03-insumo-tablas.png)
 
 **Resultado:** se creó la tabla `insumo` mediante pgAdmin, con la restricción `UNIQUE` correctamente aplicada sobre `codigo` (corregida de un intento inicial que la había apuntado por error a `stock_minimo`). Coincide con el `CREATE TABLE insumo` de la Sección 2.1.
+
+#### 3.4 Creación de la tabla `receta`
+
+![Columnas y Foreign Key de receta configuradas en pgAdmin](reporte/postgres-visual-04-receta-columnas.png)
+
+**Script SQL generado por pgAdmin:**
+
+![Script CREATE TABLE receta generado](reporte/postgres-visual-04-receta-script.png)
+
+**Trigger aplicado:**
+
+![CREATE TRIGGER trg_receta_updated_at ejecutado sin errores](reporte/postgres-visual-04-receta-trigger.png)
+
+**Evidencia de la creación:**
+
+![Consulta pg_tables confirmando receta creada](reporte/postgres-visual-04-receta-tablas.png)
+
+**Resultado:** se creó la tabla `receta` mediante pgAdmin, con la Foreign Key hacia `producto` y el trigger `trg_receta_updated_at`, reutilizando la función `actualizar_updated_at()` ya existente en este servidor local. Coincide con el `CREATE TABLE receta` de la Sección 2.1.
