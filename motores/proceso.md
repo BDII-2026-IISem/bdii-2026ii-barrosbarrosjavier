@@ -900,3 +900,36 @@ CREATE TABLE insumo (
 ![Tabla insumo creada en SQL Server](reporte/mssql-03-tabla-insumo.png)
 
 **Resultado:** la tabla se creó sin errores.
+
+### 4.4 Creación de la tabla `receta`
+
+```sql
+CREATE TABLE receta (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  producto_id INT NOT NULL REFERENCES producto(id),
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  is_active BIT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT GETDATE(),
+  updated_at DATETIME NOT NULL DEFAULT GETDATE()
+);
+GO
+
+CREATE TRIGGER trg_receta_updated_at
+ON receta
+AFTER UPDATE
+AS
+BEGIN
+  UPDATE receta
+  SET updated_at = GETDATE()
+  FROM receta
+  INNER JOIN inserted ON receta.id = inserted.id;
+END;
+GO
+```
+
+**Evidencia (imagen):**
+
+![Tabla receta y trigger creados en SQL Server](reporte/mssql-04-tabla-receta.png)
+
+**Resultado:** la tabla se creó sin errores, con la Foreign Key hacia `producto` y el trigger `trg_receta_updated_at` (`AFTER UPDATE`, ya que SQL Server no soporta `BEFORE UPDATE` como PostgreSQL), replicando el equivalente funcional de `ON UPDATE CURRENT_TIMESTAMP` de MySQL.
