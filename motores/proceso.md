@@ -984,3 +984,24 @@ GO
 ![Tabla lote_produccion y trigger creados en SQL Server](reporte/mssql-06-tabla-lote-produccion.png)
 
 **Resultado:** la tabla se creó sin errores, con la Foreign Key hacia `receta` y el trigger `trg_lote_produccion_updated_at`.
+
+### 4.7 Creación de la tabla `movimiento_insumo`
+
+```sql
+CREATE TABLE movimiento_insumo (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  lote_produccion_id INT REFERENCES lote_produccion(id),
+  insumo_id INT NOT NULL REFERENCES insumo(id),
+  tipo VARCHAR(50) NOT NULL,
+  fecha DATETIME NOT NULL,
+  cantidad DECIMAL(10,2) NOT NULL,
+  observaciones VARCHAR(MAX),
+  estado VARCHAR(30) NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla movimiento_insumo creada en SQL Server](reporte/mssql-07-tabla-movimiento-insumo.png)
+
+**Resultado:** la tabla se creó sin errores, con `lote_produccion_id` nullable y ambas Foreign Keys resueltas correctamente. Se usó `VARCHAR(MAX)` como equivalente de `TEXT`, ya que este último tipo está deprecado en SQL Server.
