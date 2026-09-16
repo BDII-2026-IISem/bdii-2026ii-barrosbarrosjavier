@@ -1005,3 +1005,23 @@ CREATE TABLE movimiento_insumo (
 ![Tabla movimiento_insumo creada en SQL Server](reporte/mssql-07-tabla-movimiento-insumo.png)
 
 **Resultado:** la tabla se creó sin errores, con `lote_produccion_id` nullable y ambas Foreign Keys resueltas correctamente. Se usó `VARCHAR(MAX)` como equivalente de `TEXT`, ya que este último tipo está deprecado en SQL Server.
+
+### 4.8 Creación de la tabla `venta`
+
+```sql
+CREATE TABLE venta (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  cliente_id INT,
+  fecha DATETIME NOT NULL,
+  subtotal DECIMAL(10,2) NOT NULL,
+  impuestos DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total DECIMAL(10,2) NOT NULL,
+  estado VARCHAR(30) NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla venta creada en SQL Server](reporte/mssql-08-tabla-venta.png)
+
+**Resultado:** la tabla se creó sin errores, sin Foreign Key para `cliente_id` — no existe una entidad `Cliente` en el modelo de 10 tablas, mismo criterio aplicado en los demás motores.
