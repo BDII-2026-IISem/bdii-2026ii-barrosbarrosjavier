@@ -638,3 +638,26 @@ CREATE TABLE pago (
 ![Tabla pago creada en PostgreSQL](reporte/postgres-11-tabla-pago.png)
 
 **Resultado:** la tabla se creó sin errores (`Execute time: 0,015s`), sin Foreign Key — `referencia_id` es polimórfica, igual que en la Sección 1 de MySQL.
+
+### 2.12 Creación de la tabla `promocion`
+
+```sql
+CREATE TABLE promocion (
+  id SERIAL PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL,
+  descripcion VARCHAR(255),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER trg_promocion_updated_at
+  BEFORE UPDATE ON promocion
+  FOR EACH ROW EXECUTE FUNCTION actualizar_updated_at();
+```
+
+**Evidencia (imagen):**
+
+![Tabla promocion y trigger creados en PostgreSQL](reporte/postgres-12-tabla-promocion.png)
+
+**Resultado:** la tabla se creó sin errores (`Execute time: 0,083s`), sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, respetando la misma decisión documentada en la Sección 1 de MySQL.
