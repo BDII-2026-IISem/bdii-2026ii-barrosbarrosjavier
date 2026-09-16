@@ -578,3 +578,23 @@ CREATE TABLE movimiento_insumo (
 ![Tabla movimiento_insumo creada en PostgreSQL](reporte/postgres-08-tabla-movimiento-insumo.png)
 
 **Resultado:** la tabla se creó sin errores (`Execute time: 0,02s`), con `lote_produccion_id` nullable, igual que en la Sección 1 de MySQL.
+
+### 2.9 Creación de la tabla `venta`
+
+```sql
+CREATE TABLE venta (
+  id SERIAL PRIMARY KEY,
+  cliente_id INT,
+  fecha TIMESTAMP NOT NULL,
+  subtotal DECIMAL(10,2) NOT NULL,
+  impuestos DECIMAL(10,2) NOT NULL DEFAULT 0,
+  total DECIMAL(10,2) NOT NULL,
+  estado VARCHAR(30) NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla venta creada en PostgreSQL](reporte/postgres-09-tabla-venta.png)
+
+**Resultado:** la tabla se creó sin errores (`Execute time: 0,01s`), sin Foreign Key para `cliente_id` — no existe una entidad `Cliente` en el modelo de 10 tablas, mismo criterio aplicado en la Sección 1 y en MySQL Workbench.
