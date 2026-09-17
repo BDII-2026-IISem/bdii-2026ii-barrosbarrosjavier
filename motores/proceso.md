@@ -1349,3 +1349,19 @@ END;
 ![Consulta sys.tables confirmando promocion creada](reporte/mssql-visual-11-promocion-tablas.png)
 
 **Resultado:** se creó la tabla `promocion` mediante el Diseñador de tablas de SSMS, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, respetando la misma decisión documentada en los demás motores. El trigger `trg_promocion_updated_at` se creó por código, como excepción documentada. El script generado coincide con el `CREATE TABLE promocion` de la Sección 4.11 (código).
+
+### 5.13 Verificación final
+
+![Diagrama de base de datos generado en SSMS — 10 tablas](reporte/mssql-visual-13-diagrama.png)
+
+```sql
+SELECT name FROM sys.tables ORDER BY name;
+```
+
+![Consulta sys.tables final — 10 tablas](reporte/mssql-visual-13-verificacion-final.png)
+
+**Resultado:** para verificar que el modelo construido manualmente en el Diseñador de tablas de SSMS (Secciones 5.3 a 5.12) coincide con lo realmente creado en el servidor, se generó un diagrama de base de datos directamente desde `hornoraiz_visual`. El resultado confirma las 10 tablas y las 8 relaciones esperadas (todas menos `promocion`, sin conector por decisión ya documentada). `sys.tables` confirma las mismas 10 tablas, idénticas en nombre a las de la Sección 4.12 (código).
+
+#### Conclusión
+
+Con esto se finaliza la creación de la base de datos `hornoraiz` de forma visual en SQL Server Management Studio, replicando las 10 tablas, las 8 relaciones y los tipos de datos definidos en la Sección 4 (código). A diferencia de MySQL Workbench y pgAdmin, SSMS no ofrece un diseñador gráfico para triggers, por lo que los tres triggers de `updated_at` (`receta`, `lote_produccion`, `promocion`) se crearon por código como excepción documentada, mientras que la estructura completa de columnas, Primary Keys, Foreign Keys, índices únicos y valores predeterminados se configuró íntegramente por diseñador, sin escribir código SQL.
