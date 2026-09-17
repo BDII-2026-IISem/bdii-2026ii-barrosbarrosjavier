@@ -1165,3 +1165,38 @@ Se instaló **SQL Server 2025 Evaluation Edition** de forma local en Windows (in
 ![Consulta sys.tables confirmando insumo creada](reporte/mssql-visual-03-insumo-tablas.png)
 
 **Resultado:** se creó la tabla `insumo` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. El script generado coincide con el `CREATE TABLE insumo` de la Sección 4.3 (código), incluyendo la restricción `UNIQUE` sobre `codigo` y los valores predeterminados `0` en `stock_minimo` y `1` en `is_active`. A diferencia de `producto`, el índice único quedó como cláusula inline desde el primer guardado, sin necesidad de una segunda pasada.
+
+### 5.5 Creación de la tabla `receta`
+
+![Columnas de receta configuradas en SSMS](reporte/mssql-visual-04-receta-columnas.png)
+
+**Configuración de la Foreign Key hacia `producto` (diálogo "Relaciones..."):**
+
+![Diálogo Tablas y columnas con FK_receta_producto](reporte/mssql-visual-04-receta-relaciones.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE receta generado](reporte/mssql-visual-04-receta-script.png)
+
+**Nota metodológica — trigger `updated_at`:** SSMS no ofrece un diseñador gráfico para la creación de triggers, a diferencia de MySQL Workbench y pgAdmin, que sí permiten definirlos por diálogo. Por esta razón, y como excepción documentada dentro de esta sección visual, el trigger `trg_receta_updated_at` se creó escribiendo el código directamente en una nueva ventana de consulta contra `hornoraiz_visual`, mientras que la estructura de columnas, la Primary Key, la Foreign Key y los valores predeterminados de la tabla sí se configuraron íntegramente por diseñador, sin código.
+
+```sql
+CREATE TRIGGER trg_receta_updated_at
+ON receta
+AFTER UPDATE
+AS
+BEGIN
+  UPDATE receta
+  SET updated_at = GETDATE()
+  FROM receta
+  INNER JOIN inserted ON receta.id = inserted.id;
+END;
+```
+
+![Ejecución del trigger trg_receta_updated_at sin errores](reporte/mssql-visual-04-receta-trigger.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando receta creada](reporte/mssql-visual-04-receta-tablas.png)
+
+**Resultado:** se creó la tabla `receta` mediante el Diseñador de tablas de SSMS, con la Foreign Key hacia `producto` configurada mediante el diálogo "Relaciones...", y los valores predeterminados `1` en `is_active` y `getdate()` en `created_at`/`updated_at` configurados por diseñador. El trigger `trg_receta_updated_at` se creó por código, como excepción documentada ante la ausencia de un diseñador gráfico de triggers en SSMS. El script generado coincide con el `CREATE TABLE receta` de la Sección 4.4 (código), incluyendo `IDENTITY(1,1)` en `id`.
