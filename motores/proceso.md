@@ -1520,3 +1520,23 @@ CREATE TABLE venta (
 ![Tabla venta creada en Oracle](reporte/oracle-08-tabla-venta.png)
 
 **Resultado:** la tabla se creó sin errores, sin Foreign Key para `cliente_id` — no existe entidad `Cliente` en el modelo de 10 tablas, mismo criterio que en los demás motores.
+
+### 6.9 Creación de la tabla `venta_detalle`
+
+```sql
+CREATE TABLE venta_detalle (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  cabecera_id NUMBER NOT NULL REFERENCES venta(id),
+  item_id NUMBER NOT NULL REFERENCES producto(id),
+  cantidad NUMBER(10,2) NOT NULL,
+  valor_unitario NUMBER(10,2) NOT NULL,
+  total NUMBER(10,2) NOT NULL,
+  observaciones CLOB
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla venta_detalle creada en Oracle](reporte/oracle-09-tabla-venta-detalle.png)
+
+**Resultado:** la tabla se creó sin errores, con las Foreign Keys `cabecera_id → venta` e `item_id → producto`.
