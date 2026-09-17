@@ -1218,3 +1218,38 @@ END;
 ![Consulta sys.tables confirmando receta_insumo creada](reporte/mssql-visual-05-receta_insumo-tablas.png)
 
 **Resultado:** se creó la tabla `receta_insumo` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. Se configuraron dos Foreign Keys mediante el diálogo "Relaciones...": `principal_id → receta(id)` y `relacionado_id → insumo(id)`, resolviendo la relación N:M entre `receta` e `insumo`, igual que en los otros tres motores. El script generado coincide con el `CREATE TABLE receta_insumo` de la Sección 4.5 (código).
+
+### 5.7 Creación de la tabla `lote_produccion`
+
+![Columnas de lote_produccion configuradas en SSMS](reporte/mssql-visual-06-lote_produccion-columnas.png)
+
+**Configuración de la Foreign Key hacia `receta` (diálogo "Relaciones..."):**
+
+![Diálogo Tablas y columnas con FK_lote_produccion_receta](reporte/mssql-visual-06-lote_produccion-relaciones.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE lote_produccion generado](reporte/mssql-visual-06-lote_produccion-script.png)
+
+**Nota metodológica — trigger `updated_at`:** al igual que en `receta` (Sección 5.5), SSMS no ofrece un diseñador gráfico para triggers, por lo que `trg_lote_produccion_updated_at` se creó por código en una nueva ventana de consulta contra `hornoraiz_visual`, mientras que la estructura de columnas, la Primary Key, la Foreign Key y los valores predeterminados sí se configuraron íntegramente por diseñador.
+
+```sql
+CREATE TRIGGER trg_lote_produccion_updated_at
+ON lote_produccion
+AFTER UPDATE
+AS
+BEGIN
+  UPDATE lote_produccion
+  SET updated_at = GETDATE()
+  FROM lote_produccion
+  INNER JOIN inserted ON lote_produccion.id = inserted.id;
+END;
+```
+
+![Ejecución del trigger trg_lote_produccion_updated_at sin errores](reporte/mssql-visual-06-lote_produccion-trigger.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando lote_produccion creada](reporte/mssql-visual-06-lote_produccion-tablas.png)
+
+**Resultado:** se creó la tabla `lote_produccion` mediante el Diseñador de tablas de SSMS, con la Foreign Key hacia `receta` configurada mediante el diálogo "Relaciones...", y los valores predeterminados `1` en `is_active` y `getdate()` en `created_at`/`updated_at` configurados por diseñador. El trigger `trg_lote_produccion_updated_at` se creó por código, como excepción documentada ante la ausencia de un diseñador gráfico de triggers en SSMS. El script generado coincide con el `CREATE TABLE lote_produccion` de la Sección 4.6 (código).
