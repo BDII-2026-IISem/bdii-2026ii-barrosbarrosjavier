@@ -1500,3 +1500,23 @@ CREATE TABLE movimiento_insumo (
 ![Tabla movimiento_insumo creada en Oracle](reporte/oracle-07-tabla-movimiento-insumo.png)
 
 **Resultado:** la tabla se creó sin errores, con `lote_produccion_id` nullable. Se usó `CLOB` como equivalente de `TEXT`.
+
+### 6.8 Creación de la tabla `venta`
+
+```sql
+CREATE TABLE venta (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  cliente_id NUMBER,
+  fecha DATE NOT NULL,
+  subtotal NUMBER(10,2) NOT NULL,
+  impuestos NUMBER(10,2) DEFAULT 0 NOT NULL,
+  total NUMBER(10,2) NOT NULL,
+  estado VARCHAR2(30) NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla venta creada en Oracle](reporte/oracle-08-tabla-venta.png)
+
+**Resultado:** la tabla se creó sin errores, sin Foreign Key para `cliente_id` — no existe entidad `Cliente` en el modelo de 10 tablas, mismo criterio que en los demás motores.
