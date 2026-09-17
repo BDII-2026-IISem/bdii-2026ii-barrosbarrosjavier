@@ -1560,3 +1560,30 @@ CREATE TABLE pago (
 ![Tabla pago creada en Oracle](reporte/oracle-10-tabla-pago.png)
 
 **Resultado:** la tabla se creó sin errores, sin Foreign Key — `referencia_id` es polimórfica.
+
+### 6.11 Creación de la tabla `promocion`
+
+```sql
+CREATE TABLE promocion (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre VARCHAR2(100) NOT NULL,
+  descripcion VARCHAR2(255),
+  is_active NUMBER(1) DEFAULT 1 NOT NULL,
+  created_at DATE DEFAULT SYSDATE NOT NULL,
+  updated_at DATE DEFAULT SYSDATE NOT NULL
+);
+
+CREATE OR REPLACE TRIGGER trg_promocion_updated_at
+BEFORE UPDATE ON promocion
+FOR EACH ROW
+BEGIN
+  :NEW.updated_at := SYSDATE;
+END;
+/
+```
+
+**Evidencia (imagen):**
+
+![Tabla promocion y trigger creados en Oracle](reporte/oracle-11-tabla-promocion.png)
+
+**Resultado:** la tabla se creó sin errores, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, con el trigger `trg_promocion_updated_at` respetando la misma decisión de diseño documentada en los demás motores.
