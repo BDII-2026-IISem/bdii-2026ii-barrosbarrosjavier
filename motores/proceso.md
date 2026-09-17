@@ -1384,3 +1384,52 @@ CREATE TABLE producto (
 **Evidencia (imagen):**
 
 ![Tabla producto creada en Oracle](reporte/oracle-02-tabla-producto.png)
+
+**Resultado:** la tabla se creó sin errores. Se documenta la decisión de mapeo `is_active NUMBER(1)` en lugar de `BOOLEAN`, ya que Oracle no tiene tipo booleano nativo en columnas de tabla.
+
+### 6.3 Creación de la tabla `insumo`
+
+```sql
+CREATE TABLE insumo (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  codigo VARCHAR2(50) NOT NULL UNIQUE,
+  nombre VARCHAR2(100) NOT NULL,
+  unidad_medida VARCHAR2(30) NOT NULL,
+  stock_minimo NUMBER(10,2) DEFAULT 0 NOT NULL,
+  is_active NUMBER(1) DEFAULT 1 NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla insumo creada en Oracle](reporte/oracle-03-tabla-insumo.png)
+
+**Resultado:** la tabla se creó sin errores.
+
+### 6.4 Creación de la tabla `receta`
+
+```sql
+CREATE TABLE receta (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  producto_id NUMBER NOT NULL REFERENCES producto(id),
+  nombre VARCHAR2(100) NOT NULL,
+  descripcion VARCHAR2(255),
+  is_active NUMBER(1) DEFAULT 1 NOT NULL,
+  created_at DATE DEFAULT SYSDATE NOT NULL,
+  updated_at DATE DEFAULT SYSDATE NOT NULL
+);
+
+CREATE OR REPLACE TRIGGER trg_receta_updated_at
+BEFORE UPDATE ON receta
+FOR EACH ROW
+BEGIN
+  :NEW.updated_at := SYSDATE;
+END;
+/
+```
+
+**Evidencia (imagen):**
+
+![Tabla receta y trigger creados en Oracle](reporte/oracle-04-tabla-receta.png)
+
+**Resultado:** la tabla se creó sin errores, respetando la Foreign Key hacia `producto`. El trigger `trg_receta_updated_at` usa `BEFORE UPDATE` — Oracle sí soporta esta sintaxis, a diferencia de SQL Server (Sección 4.4, `AFTER UPDATE`), y de forma equivalente a PostgreSQL (Sección 2.5), aunque sin necesidad de una función reutilizable separada: en Oracle el cuerpo del trigger va inline.
