@@ -1200,3 +1200,21 @@ END;
 ![Consulta sys.tables confirmando receta creada](reporte/mssql-visual-04-receta-tablas.png)
 
 **Resultado:** se creó la tabla `receta` mediante el Diseñador de tablas de SSMS, con la Foreign Key hacia `producto` configurada mediante el diálogo "Relaciones...", y los valores predeterminados `1` en `is_active` y `getdate()` en `created_at`/`updated_at` configurados por diseñador. El trigger `trg_receta_updated_at` se creó por código, como excepción documentada ante la ausencia de un diseñador gráfico de triggers en SSMS. El script generado coincide con el `CREATE TABLE receta` de la Sección 4.4 (código), incluyendo `IDENTITY(1,1)` en `id`.
+
+### 5.6 Creación de la tabla `receta_insumo`
+
+![Columnas de receta_insumo configuradas en SSMS](reporte/mssql-visual-05-receta_insumo-columnas.png)
+
+**Configuración de las Foreign Keys hacia `receta` e `insumo` (diálogo "Relaciones..."):**
+
+![Diálogo Tablas y columnas con FK_receta_insumo_receta y FK_receta_insumo_insumo](reporte/mssql-visual-05-receta_insumo-relaciones.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE receta_insumo generado](reporte/mssql-visual-05-receta_insumo-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando receta_insumo creada](reporte/mssql-visual-05-receta_insumo-tablas.png)
+
+**Resultado:** se creó la tabla `receta_insumo` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. Se configuraron dos Foreign Keys mediante el diálogo "Relaciones...": `principal_id → receta(id)` y `relacionado_id → insumo(id)`, resolviendo la relación N:M entre `receta` e `insumo`, igual que en los otros tres motores. El script generado coincide con el `CREATE TABLE receta_insumo` de la Sección 4.5 (código).
