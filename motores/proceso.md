@@ -1286,3 +1286,21 @@ END;
 ![Consulta sys.tables confirmando venta creada](reporte/mssql-visual-08-venta-tablas.png)
 
 **Resultado:** se creó la tabla `venta` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente, sin Foreign Key para `cliente_id` — no existe una entidad `Cliente` en el modelo de 10 tablas, mismo criterio aplicado en los demás motores. El script generado coincide con el `CREATE TABLE venta` de la Sección 4.8 (código), incluyendo el valor predeterminado `0` en `impuestos`.
+
+### 5.10 Creación de la tabla `venta_detalle`
+
+![Columnas de venta_detalle configuradas en SSMS](reporte/mssql-visual-09-venta_detalle-columnas.png)
+
+**Configuración de las Foreign Keys hacia `venta` y `producto` (diálogo "Relaciones..."):**
+
+![Diálogo Tablas y columnas con FK_venta_detalle_venta y FK_venta_detalle_producto](reporte/mssql-visual-09-venta_detalle-relaciones.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE venta_detalle generado](reporte/mssql-visual-09-venta_detalle-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando venta_detalle creada](reporte/mssql-visual-09-venta_detalle-tablas.png)
+
+**Resultado:** se creó la tabla `venta_detalle` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. Se configuraron dos Foreign Keys mediante el diálogo "Relaciones...": `cabecera_id → venta(id)` e `item_id → producto(id)`, replicando el `CREATE TABLE venta_detalle` de la Sección 4.9 (código).
