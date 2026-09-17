@@ -1272,3 +1272,17 @@ END;
 ![Consulta sys.tables confirmando movimiento_insumo creada](reporte/mssql-visual-07-movimiento_insumo-tablas.png)
 
 **Resultado:** se creó la tabla `movimiento_insumo` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. Se configuraron dos Foreign Keys mediante el diálogo "Relaciones...": `lote_produccion_id → lote_produccion(id)` (nullable) e `insumo_id → insumo(id)` (obligatoria), replicando el `CREATE TABLE movimiento_insumo` de la Sección 4.7 (código), incluyendo `varchar(max)` en `observaciones` como equivalente de `TEXT`.
+
+### 5.9 Creación de la tabla `venta`
+
+![Columnas de venta configuradas en SSMS](reporte/mssql-visual-08-venta-columnas.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE venta generado](reporte/mssql-visual-08-venta-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando venta creada](reporte/mssql-visual-08-venta-tablas.png)
+
+**Resultado:** se creó la tabla `venta` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente, sin Foreign Key para `cliente_id` — no existe una entidad `Cliente` en el modelo de 10 tablas, mismo criterio aplicado en los demás motores. El script generado coincide con el `CREATE TABLE venta` de la Sección 4.8 (código), incluyendo el valor predeterminado `0` en `impuestos`.
