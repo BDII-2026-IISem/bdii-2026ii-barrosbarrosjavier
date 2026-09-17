@@ -1540,3 +1540,23 @@ CREATE TABLE venta_detalle (
 ![Tabla venta_detalle creada en Oracle](reporte/oracle-09-tabla-venta-detalle.png)
 
 **Resultado:** la tabla se creó sin errores, con las Foreign Keys `cabecera_id → venta` e `item_id → producto`.
+
+### 6.10 Creación de la tabla `pago`
+
+```sql
+CREATE TABLE pago (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  referencia_tipo VARCHAR2(50) NOT NULL,
+  referencia_id NUMBER NOT NULL,
+  metodo VARCHAR2(50) NOT NULL,
+  monto NUMBER(10,2) NOT NULL,
+  fecha DATE NOT NULL,
+  estado VARCHAR2(30) NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla pago creada en Oracle](reporte/oracle-10-tabla-pago.png)
+
+**Resultado:** la tabla se creó sin errores, sin Foreign Key — `referencia_id` es polimórfica.
