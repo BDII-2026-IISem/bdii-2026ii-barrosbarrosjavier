@@ -1587,3 +1587,19 @@ END;
 ![Tabla promocion y trigger creados en Oracle](reporte/oracle-11-tabla-promocion.png)
 
 **Resultado:** la tabla se creó sin errores, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, con el trigger `trg_promocion_updated_at` respetando la misma decisión de diseño documentada en los demás motores.
+
+### 6.12 Verificación final
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+**Evidencia (imagen):**
+
+![Verificación final de las 10 tablas en Oracle](reporte/oracle-12-verificacion-final.png)
+
+**Resultado:** la consulta devolvió las 10 tablas esperadas, sin `PROMOCION_PRODUCTO`, confirmando que el modelo quedó completo.
+
+#### Conclusión
+
+Con esto se finaliza la creación de la base de datos `hornoraiz` en Oracle mediante código SQL en DBeaver. Se documentaron las siguientes decisiones de mapeo de tipos, al no existir equivalentes directos en Oracle a los usados en los otros tres motores: `GENERATED ALWAYS AS IDENTITY` (autoincremento), `VARCHAR2` (texto), `NUMBER(p,s)` (decimales), `NUMBER(1)` (booleano), `DATE` (fecha/hora) y `CLOB` (texto largo). Los tres triggers de auto-actualización de `updated_at` (`receta`, `lote_produccion`, `promocion`) usan `BEFORE UPDATE`, sintaxis que Oracle sí soporta a diferencia de SQL Server.
