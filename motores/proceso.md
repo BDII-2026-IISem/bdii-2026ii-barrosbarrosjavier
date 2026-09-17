@@ -1433,3 +1433,49 @@ END;
 ![Tabla receta y trigger creados en Oracle](reporte/oracle-04-tabla-receta.png)
 
 **Resultado:** la tabla se creó sin errores, respetando la Foreign Key hacia `producto`. El trigger `trg_receta_updated_at` usa `BEFORE UPDATE` — Oracle sí soporta esta sintaxis, a diferencia de SQL Server (Sección 4.4, `AFTER UPDATE`), y de forma equivalente a PostgreSQL (Sección 2.5), aunque sin necesidad de una función reutilizable separada: en Oracle el cuerpo del trigger va inline.
+
+### 6.5 Creación de la tabla `receta_insumo`
+
+```sql
+CREATE TABLE receta_insumo (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  principal_id NUMBER NOT NULL REFERENCES receta(id),
+  relacionado_id NUMBER NOT NULL REFERENCES insumo(id),
+  datos_relacion VARCHAR2(255),
+  is_active NUMBER(1) DEFAULT 1 NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla receta_insumo creada en Oracle](reporte/oracle-05-tabla-receta-insumo.png)
+
+**Resultado:** la tabla se creó sin errores, resolviendo la relación N:M entre `receta` e `insumo`.
+
+### 6.6 Creación de la tabla `lote_produccion`
+
+```sql
+CREATE TABLE lote_produccion (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  receta_id NUMBER NOT NULL REFERENCES receta(id),
+  nombre VARCHAR2(100) NOT NULL,
+  descripcion VARCHAR2(255),
+  is_active NUMBER(1) DEFAULT 1 NOT NULL,
+  created_at DATE DEFAULT SYSDATE NOT NULL,
+  updated_at DATE DEFAULT SYSDATE NOT NULL
+);
+
+CREATE OR REPLACE TRIGGER trg_lote_produccion_updated_at
+BEFORE UPDATE ON lote_produccion
+FOR EACH ROW
+BEGIN
+  :NEW.updated_at := SYSDATE;
+END;
+/
+```
+
+**Evidencia (imagen):**
+
+![Tabla lote_produccion y trigger creados en Oracle](reporte/oracle-06-tabla-lote-produccion.png)
+
+**Resultado:** la tabla se creó sin errores, con la Foreign Key hacia `receta` y el trigger `trg_lote_produccion_updated_at`.
