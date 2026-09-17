@@ -1151,3 +1151,17 @@ Se instaló **SQL Server 2025 Evaluation Edition** de forma local en Windows (in
 ![Consulta sys.tables confirmando producto creada](reporte/mssql-visual-02-producto-tablas.png)
 
 **Resultado:** se creó la tabla `producto` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. El script generado coincide con el `CREATE TABLE producto` de la Sección 4.2 (código), incluyendo la restricción `UNIQUE` sobre `sku` — agregada tras la configuración inicial mediante el diálogo "Índices o claves...", motivo por el cual quedó como cláusula inline sin nombre explícito, a diferencia de `PK_producto` y `DF_producto_is_active`.
+
+### 5.4 Creación de la tabla `insumo`
+
+![Columnas de insumo configuradas en SSMS](reporte/mssql-visual-03-insumo-columnas.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE insumo generado](reporte/mssql-visual-03-insumo-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando insumo creada](reporte/mssql-visual-03-insumo-tablas.png)
+
+**Resultado:** se creó la tabla `insumo` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. El script generado coincide con el `CREATE TABLE insumo` de la Sección 4.3 (código), incluyendo la restricción `UNIQUE` sobre `codigo` y los valores predeterminados `0` en `stock_minimo` y `1` en `is_active`. A diferencia de `producto`, el índice único quedó como cláusula inline desde el primer guardado, sin necesidad de una segunda pasada.
