@@ -1133,3 +1133,21 @@ Se instaló **SQL Server 2025 Evaluation Edition** de forma local en Windows (in
 ![Base de datos hornoraiz_visual creada en SSMS](reporte/mssql-visual-01-database-creada.png)
 
 **Resultado:** se creó la base de datos `hornoraiz_visual` mediante el asistente gráfico "Nueva base de datos" de SSMS, sin escribir código SQL, como destino separado de la base `hornoraiz` ya evaluada por código en la Sección 4.1.
+
+### 5.3 Creación de la tabla `producto`
+
+![Columnas de producto configuradas en SSMS](reporte/mssql-visual-02-producto-columnas.png)
+
+**Configuración del índice único sobre `sku`:**
+
+![Diálogo Índices o claves con UNIQUE en sku](reporte/mssql-visual-02-producto-indice.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE producto generado](reporte/mssql-visual-02-producto-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando producto creada](reporte/mssql-visual-02-producto-tablas.png)
+
+**Resultado:** se creó la tabla `producto` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. El script generado coincide con el `CREATE TABLE producto` de la Sección 4.2 (código), incluyendo la restricción `UNIQUE` sobre `sku` — agregada tras la configuración inicial mediante el diálogo "Índices o claves...", motivo por el cual quedó como cláusula inline sin nombre explícito, a diferencia de `PK_producto` y `DF_producto_is_active`.
