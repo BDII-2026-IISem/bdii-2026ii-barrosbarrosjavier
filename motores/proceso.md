@@ -1479,3 +1479,24 @@ END;
 ![Tabla lote_produccion y trigger creados en Oracle](reporte/oracle-06-tabla-lote-produccion.png)
 
 **Resultado:** la tabla se creó sin errores, con la Foreign Key hacia `receta` y el trigger `trg_lote_produccion_updated_at`.
+
+### 6.7 Creación de la tabla `movimiento_insumo`
+
+```sql
+CREATE TABLE movimiento_insumo (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  lote_produccion_id NUMBER REFERENCES lote_produccion(id),
+  insumo_id NUMBER NOT NULL REFERENCES insumo(id),
+  tipo VARCHAR2(50) NOT NULL,
+  fecha DATE NOT NULL,
+  cantidad NUMBER(10,2) NOT NULL,
+  observaciones CLOB,
+  estado VARCHAR2(30) NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla movimiento_insumo creada en Oracle](reporte/oracle-07-tabla-movimiento-insumo.png)
+
+**Resultado:** la tabla se creó sin errores, con `lote_produccion_id` nullable. Se usó `CLOB` como equivalente de `TEXT`.
