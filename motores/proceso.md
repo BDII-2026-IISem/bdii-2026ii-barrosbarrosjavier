@@ -1253,3 +1253,22 @@ END;
 ![Consulta sys.tables confirmando lote_produccion creada](reporte/mssql-visual-06-lote_produccion-tablas.png)
 
 **Resultado:** se creó la tabla `lote_produccion` mediante el Diseñador de tablas de SSMS, con la Foreign Key hacia `receta` configurada mediante el diálogo "Relaciones...", y los valores predeterminados `1` en `is_active` y `getdate()` en `created_at`/`updated_at` configurados por diseñador. El trigger `trg_lote_produccion_updated_at` se creó por código, como excepción documentada ante la ausencia de un diseñador gráfico de triggers en SSMS. El script generado coincide con el `CREATE TABLE lote_produccion` de la Sección 4.6 (código).
+
+
+### 5.8 Creación de la tabla `movimiento_insumo`
+
+![Columnas de movimiento_insumo configuradas en SSMS](reporte/mssql-visual-07-movimiento_insumo-columnas.png)
+
+**Configuración de las Foreign Keys hacia `lote_produccion` e `insumo` (diálogo "Relaciones..."):**
+
+![Diálogo Tablas y columnas con FK_movimiento_insumo_lote_produccion y FK_movimiento_insumo_insumo](reporte/mssql-visual-07-movimiento_insumo-relaciones.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE movimiento_insumo generado](reporte/mssql-visual-07-movimiento_insumo-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando movimiento_insumo creada](reporte/mssql-visual-07-movimiento_insumo-tablas.png)
+
+**Resultado:** se creó la tabla `movimiento_insumo` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. Se configuraron dos Foreign Keys mediante el diálogo "Relaciones...": `lote_produccion_id → lote_produccion(id)` (nullable) e `insumo_id → insumo(id)` (obligatoria), replicando el `CREATE TABLE movimiento_insumo` de la Sección 4.7 (código), incluyendo `varchar(max)` en `observaciones` como equivalente de `TEXT`.
