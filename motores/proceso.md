@@ -1304,3 +1304,17 @@ END;
 ![Consulta sys.tables confirmando venta_detalle creada](reporte/mssql-visual-09-venta_detalle-tablas.png)
 
 **Resultado:** se creó la tabla `venta_detalle` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente. Se configuraron dos Foreign Keys mediante el diálogo "Relaciones...": `cabecera_id → venta(id)` e `item_id → producto(id)`, replicando el `CREATE TABLE venta_detalle` de la Sección 4.9 (código).
+
+### 5.11 Creación de la tabla `pago`
+
+![Columnas de pago configuradas en SSMS](reporte/mssql-visual-10-pago-columnas.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE pago generado](reporte/mssql-visual-10-pago-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando pago creada](reporte/mssql-visual-10-pago-tablas.png)
+
+**Resultado:** se creó la tabla `pago` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente, sin Foreign Key — `referencia_id` es polimórfica, igual que en los demás motores. El script generado coincide con el `CREATE TABLE pago` de la Sección 4.10 (código).
