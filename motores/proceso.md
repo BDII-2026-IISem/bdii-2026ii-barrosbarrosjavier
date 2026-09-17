@@ -1352,16 +1352,35 @@ END;
 
 ### 5.13 Verificación final
 
-![Diagrama de base de datos generado en SSMS — 10 tablas](reporte/mssql-visual-13-diagrama.png)
-
 ```sql
 SELECT name FROM sys.tables ORDER BY name;
 ```
 
 ![Consulta sys.tables final — 10 tablas](reporte/mssql-visual-13-verificacion-final.png)
 
-**Resultado:** para verificar que el modelo construido manualmente en el Diseñador de tablas de SSMS (Secciones 5.3 a 5.12) coincide con lo realmente creado en el servidor, se generó un diagrama de base de datos directamente desde `hornoraiz_visual`. El resultado confirma las 10 tablas y las 8 relaciones esperadas (todas menos `promocion`, sin conector por decisión ya documentada). `sys.tables` confirma las mismas 10 tablas, idénticas en nombre a las de la Sección 4.12 (código).
+**Nota metodológica:** a diferencia de MySQL Workbench y pgAdmin, que permitieron generar un diagrama EER/ERD de verificación mediante Reverse Engineer, la generación de diagramas de base de datos en SSMS presentó un error no documentado por Microsoft ("Error desconocido: 00000000") al intentar agregar las tablas al lienzo, por lo que se omite el diagrama visual para esta sección y la verificación final se sostiene únicamente en la consulta `sys.tables`, consistente con la verificación de cada tabla individual de las Secciones 5.3 a 5.12.
+
+**Resultado:** la consulta `sys.tables` sobre `hornoraiz_visual` confirma las 10 tablas esperadas (`insumo`, `lote_produccion`, `movimiento_insumo`, `pago`, `producto`, `promocion`, `receta`, `receta_insumo`, `venta`, `venta_detalle`), coincidiendo con las mismas 10 tablas de la Sección 4.12 (código).
 
 #### Conclusión
 
 Con esto se finaliza la creación de la base de datos `hornoraiz` de forma visual en SQL Server Management Studio, replicando las 10 tablas, las 8 relaciones y los tipos de datos definidos en la Sección 4 (código). A diferencia de MySQL Workbench y pgAdmin, SSMS no ofrece un diseñador gráfico para triggers, por lo que los tres triggers de `updated_at` (`receta`, `lote_produccion`, `promocion`) se crearon por código como excepción documentada, mientras que la estructura completa de columnas, Primary Keys, Foreign Keys, índices únicos y valores predeterminados se configuró íntegramente por diseñador, sin escribir código SQL.
+
+# Oracle
+
+### 6.2 Creación de la tabla `producto`
+
+```sql
+CREATE TABLE producto (
+  id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  sku VARCHAR2(50) NOT NULL UNIQUE,
+  nombre VARCHAR2(100) NOT NULL,
+  descripcion VARCHAR2(255),
+  precio NUMBER(10,2) NOT NULL,
+  is_active NUMBER(1) DEFAULT 1 NOT NULL
+);
+```
+
+**Evidencia (imagen):**
+
+![Tabla producto creada en Oracle](reporte/oracle-02-tabla-producto.png)
