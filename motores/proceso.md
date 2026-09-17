@@ -1318,3 +1318,34 @@ END;
 ![Consulta sys.tables confirmando pago creada](reporte/mssql-visual-10-pago-tablas.png)
 
 **Resultado:** se creó la tabla `pago` mediante el Diseñador de tablas de SSMS, sin escribir SQL manualmente, sin Foreign Key — `referencia_id` es polimórfica, igual que en los demás motores. El script generado coincide con el `CREATE TABLE pago` de la Sección 4.10 (código).
+
+### 5.12 Creación de la tabla `promocion`
+
+![Columnas de promocion configuradas en SSMS](reporte/mssql-visual-11-promocion-columnas.png)
+
+**Script SQL generado por SSMS (Generar script de tabla como → CREATE To):**
+
+![Script CREATE TABLE promocion generado](reporte/mssql-visual-11-promocion-script.png)
+
+**Nota metodológica — trigger `updated_at`:** al igual que en `receta` (Sección 5.5) y `lote_produccion` (Sección 5.7), SSMS no ofrece un diseñador gráfico para triggers, por lo que `trg_promocion_updated_at` se creó por código en una nueva ventana de consulta contra `hornoraiz_visual`, mientras que la estructura de columnas y los valores predeterminados sí se configuraron íntegramente por diseñador.
+
+```sql
+CREATE TRIGGER trg_promocion_updated_at
+ON promocion
+AFTER UPDATE
+AS
+BEGIN
+  UPDATE promocion
+  SET updated_at = GETDATE()
+  FROM promocion
+  INNER JOIN inserted ON promocion.id = inserted.id;
+END;
+```
+
+![Ejecución del trigger trg_promocion_updated_at sin errores](reporte/mssql-visual-11-promocion-trigger.png)
+
+**Evidencia de la creación:**
+
+![Consulta sys.tables confirmando promocion creada](reporte/mssql-visual-11-promocion-tablas.png)
+
+**Resultado:** se creó la tabla `promocion` mediante el Diseñador de tablas de SSMS, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, respetando la misma decisión documentada en los demás motores. El trigger `trg_promocion_updated_at` se creó por código, como excepción documentada. El script generado coincide con el `CREATE TABLE promocion` de la Sección 4.11 (código).
