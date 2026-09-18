@@ -1724,3 +1724,39 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 ![Consulta user_tables confirmando LOTE_PRODUCCION creada](reporte/oracle-visual-06-lote_produccion-tablas.png)
 
 **Resultado:** se creó la tabla `lote_produccion` mediante el diálogo "Crear Tabla" de SQL Developer, con la Foreign Key hacia `receta` y los valores predeterminados `1`/`SYSDATE` correspondientes. El trigger se creó por código, como excepción documentada. El script generado coincide con el `CREATE TABLE lote_produccion` de la Sección 6.6 (código).
+
+### 7.7 Creación de la tabla `movimiento_insumo`
+
+![Columnas de movimiento_insumo configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-07-movimiento_insumo-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE movimiento_insumo generado](reporte/oracle-visual-07-movimiento_insumo-script.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando MOVIMIENTO_INSUMO creada](reporte/oracle-visual-07-movimiento_insumo-tablas.png)
+
+**Resultado:** se creó la tabla `movimiento_insumo` mediante el diálogo "Crear Tabla" de SQL Developer, con dos Foreign Keys: `lote_produccion_id → lote_produccion(id)` (nullable) e `insumo_id → insumo(id)` (obligatoria). El script generado coincide con el `CREATE TABLE movimiento_insumo` de la Sección 6.7 (código).
+
+### 7.8 Creación de la tabla `venta`
+
+![Columnas de venta configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-08-venta-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE venta generado](reporte/oracle-visual-08-venta-script.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando VENTA creada](reporte/oracle-visual-08-venta-tablas.png)
+
+**Resultado:** se creó la tabla `venta` mediante el diálogo "Crear Tabla" de SQL Developer, sin Foreign Key para `cliente_id` — no existe entidad `Cliente` en el modelo de 10 tablas, mismo criterio que en los demás motores. El script generado coincide con el `CREATE TABLE venta` de la Sección 6.8 (código).
