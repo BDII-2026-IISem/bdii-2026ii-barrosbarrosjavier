@@ -1643,3 +1643,35 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 ![Consulta user_tables confirmando INSUMO creada](reporte/oracle-visual-03-insumo-tablas.png)
 
 **Resultado:** se creó la tabla `insumo` mediante el diálogo "Crear Tabla" de SQL Developer, con `id` como Identity Column, y `codigo` con restricción `UNIQUE` (`INSUMO_UK1`) configurada antes de crear la tabla. El script generado incluye cláusulas de almacenamiento físico por defecto (`TABLESPACE`, `STORAGE`, `PCTFREE`) expuestas al activar el modo "Avanzado" del diálogo, sin que esto afecte la estructura lógica de la tabla, la cual coincide con el `CREATE TABLE insumo` de la Sección 6.3 (código).
+
+### 7.4 Creación de la tabla `receta`
+
+![Columnas de receta configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-04-receta-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE receta generado](reporte/oracle-visual-04-receta-script.png)
+
+**Nota metodológica — trigger `updated_at`:** al igual que en SQL Server (Sección 5.5), SQL Developer no ofrece un diseñador gráfico para la creación de triggers, a diferencia de MySQL Workbench y pgAdmin. Por esta razón, el trigger `trg_receta_updated_at` se creó escribiendo el código directamente en el Worksheet SQL, mientras que la estructura de columnas, la Primary Key, la Foreign Key hacia `producto` y los valores predeterminados se configuraron íntegramente por diseñador, sin código.
+
+```sql
+CREATE OR REPLACE TRIGGER trg_receta_updated_at
+BEFORE UPDATE ON receta
+FOR EACH ROW
+BEGIN
+  :NEW.updated_at := SYSDATE;
+END;
+/
+```
+
+![Ejecución del trigger trg_receta_updated_at sin errores](reporte/oracle-visual-04-receta-trigger.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando RECETA creada](reporte/oracle-visual-04-receta-tablas.png)
+
+**Resultado:** se creó la tabla `receta` mediante el diálogo "Crear Tabla" de SQL Developer, con la Foreign Key hacia `producto` configurada mediante "Nueva Clave Ajena Restricción" en la pestaña "Restricciones", y los valores predeterminados `1` en `is_active` y `SYSDATE` en `created_at`/`updated_at`. El trigger `trg_receta_updated_at` se creó por código, como excepción documentada. El script generado coincide con el `CREATE TABLE receta` de la Sección 6.4 (código).
