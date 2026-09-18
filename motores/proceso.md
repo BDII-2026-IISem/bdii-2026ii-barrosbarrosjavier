@@ -1675,3 +1675,20 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 ![Consulta user_tables confirmando RECETA creada](reporte/oracle-visual-04-receta-tablas.png)
 
 **Resultado:** se creó la tabla `receta` mediante el diálogo "Crear Tabla" de SQL Developer, con la Foreign Key hacia `producto` configurada mediante "Nueva Clave Ajena Restricción" en la pestaña "Restricciones", y los valores predeterminados `1` en `is_active` y `SYSDATE` en `created_at`/`updated_at`. El trigger `trg_receta_updated_at` se creó por código, como excepción documentada. El script generado coincide con el `CREATE TABLE receta` de la Sección 6.4 (código).
+### 7.5 Creación de la tabla `receta_insumo`
+
+![Columnas de receta_insumo configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-05-receta_insumo-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE receta_insumo generado](reporte/oracle-visual-05-receta_insumo-script.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando RECETA_INSUMO creada](reporte/oracle-visual-05-receta_insumo-tablas.png)
+
+**Resultado:** se creó la tabla `receta_insumo` mediante el diálogo "Crear Tabla" de SQL Developer, con dos Foreign Keys configuradas mediante "Nueva Clave Ajena Restricción": `principal_id → receta(id)` y `relacionado_id → insumo(id)`, resolviendo la relación N:M entre `receta` e `insumo`. El script generado coincide con el `CREATE TABLE receta_insumo` de la Sección 6.5 (código).
