@@ -1603,3 +1603,25 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 #### Conclusión
 
 Con esto se finaliza la creación de la base de datos `hornoraiz` en Oracle mediante código SQL en DBeaver. Se documentaron las siguientes decisiones de mapeo de tipos, al no existir equivalentes directos en Oracle a los usados en los otros tres motores: `GENERATED ALWAYS AS IDENTITY` (autoincremento), `VARCHAR2` (texto), `NUMBER(p,s)` (decimales), `NUMBER(1)` (booleano), `DATE` (fecha/hora) y `CLOB` (texto largo). Los tres triggers de auto-actualización de `updated_at` (`receta`, `lote_produccion`, `promocion`) usan `BEFORE UPDATE`, sintaxis que Oracle sí soporta a diferencia de SQL Server.
+
+## 7. Base de Datos Oracle — Parte Visual (Oracle SQL Developer)
+
+### 7.1 Instalación y configuración
+
+Se instaló **Oracle Database Free** de forma local en Windows, junto con **Oracle SQL Developer** para la parte gráfica. A diferencia de los otros tres motores, cuya instancia por código corre dentro de la VM VirtualBox/Ubuntu, esta instalación de Oracle es nativa en Windows, conectando a `localhost:1521`, Servicio `FREE`, usuario `SYSTEM`.
+
+**Nota metodológica:** se utilizó el esquema `SYSTEM` para alojar las tablas de este ejercicio, en lugar de crear un usuario/esquema dedicado, dado el límite de tiempo disponible para completar la entrega.
+
+### 7.2 Creación de la tabla `producto`
+
+![Columnas de producto configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-02-producto-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE producto generado](reporte/oracle-visual-02-producto-script.png)
+
+**Evidencia de la creación:**
+
+![Consulta user_tables confirmando PRODUCTO creada](reporte/oracle-visual-02-producto-tablas.png)
+
+**Resultado:** se creó la tabla `producto` mediante el diálogo "Crear Tabla" de SQL Developer, sin escribir SQL manualmente, con `id` como Primary Key e Identity Column (`GENERATED ALWAYS`), y `sku` con restricción `UNIQUE` (`PRODUCTO_UK1`) configurada desde la pestaña "Restricciones" antes de crear la tabla, evitando la corrección posterior que fue necesaria en la Sección 5.3 (SQL Server visual). El script generado coincide con el `CREATE TABLE producto` de la Sección 6.2 (código).
