@@ -1760,3 +1760,21 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 ![Consulta user_tables confirmando VENTA creada](reporte/oracle-visual-08-venta-tablas.png)
 
 **Resultado:** se creó la tabla `venta` mediante el diálogo "Crear Tabla" de SQL Developer, sin Foreign Key para `cliente_id` — no existe entidad `Cliente` en el modelo de 10 tablas, mismo criterio que en los demás motores. El script generado coincide con el `CREATE TABLE venta` de la Sección 6.8 (código).
+
+### 7.9 Creación de la tabla `pago`
+
+![Columnas de pago configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-09-pago-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE pago generado](reporte/oracle-visual-09-pago-script.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando PAGO creada](reporte/oracle-visual-09-pago-tablas.png)
+
+**Resultado:** se creó la tabla `pago` mediante el diálogo "Crear Tabla" de SQL Developer, sin Foreign Key — `referencia_id` es polimórfica, igual que en los demás motores. El script generado coincide con el `CREATE TABLE pago` de la Sección 6.10 (código).
