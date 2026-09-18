@@ -1625,3 +1625,21 @@ Se instaló **Oracle Database Free** de forma local en Windows, junto con **Orac
 ![Consulta user_tables confirmando PRODUCTO creada](reporte/oracle-visual-02-producto-tablas.png)
 
 **Resultado:** se creó la tabla `producto` mediante el diálogo "Crear Tabla" de SQL Developer, sin escribir SQL manualmente, con `id` como Primary Key e Identity Column (`GENERATED ALWAYS`), y `sku` con restricción `UNIQUE` (`PRODUCTO_UK1`) configurada desde la pestaña "Restricciones" antes de crear la tabla, evitando la corrección posterior que fue necesaria en la Sección 5.3 (SQL Server visual). El script generado coincide con el `CREATE TABLE producto` de la Sección 6.2 (código).
+
+### 7.3 Creación de la tabla `insumo`
+
+![Columnas de insumo configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-03-insumo-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE insumo generado](reporte/oracle-visual-03-insumo-script.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando INSUMO creada](reporte/oracle-visual-03-insumo-tablas.png)
+
+**Resultado:** se creó la tabla `insumo` mediante el diálogo "Crear Tabla" de SQL Developer, con `id` como Identity Column, y `codigo` con restricción `UNIQUE` (`INSUMO_UK1`) configurada antes de crear la tabla. El script generado incluye cláusulas de almacenamiento físico por defecto (`TABLESPACE`, `STORAGE`, `PCTFREE`) expuestas al activar el modo "Avanzado" del diálogo, sin que esto afecte la estructura lógica de la tabla, la cual coincide con el `CREATE TABLE insumo` de la Sección 6.3 (código).
