@@ -1828,3 +1828,21 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 ![Consulta user_tables confirmando PROMOCION creada](reporte/oracle-visual-11-promocion-tablas.png)
 
 **Resultado:** se creó la tabla `promocion` mediante el diálogo "Crear Tabla" de SQL Developer, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, respetando la misma decisión documentada en los demás motores. El trigger se creó por código, como excepción documentada. El script generado coincide con el `CREATE TABLE promocion` de la Sección 6.11 (código).
+
+### 7.12 Verificación final
+
+```sql
+SELECT table_name FROM user_tables 
+WHERE table_name IN ('PRODUCTO','INSUMO','RECETA','RECETA_INSUMO','LOTE_PRODUCCION','MOVIMIENTO_INSUMO','VENTA','VENTA_DETALLE','PAGO','PROMOCION')
+ORDER BY table_name;
+```
+
+![Consulta user_tables filtrada — 10 tablas](reporte/oracle-visual-12-verificacion-final.png)
+
+**Nota metodológica:** dado que el esquema `SYSTEM` contiene además numerosos objetos internos de Oracle, una consulta sin filtro sobre `user_tables` devuelve más de 40 filas ajenas al modelo. Se filtró explícitamente por los nombres de las 10 tablas del proyecto para una verificación limpia. Tampoco se generó un diagrama de base de datos para esta sección — al igual que en SQL Server (Sección 5.13) — dado que la generación de diagramas en SQL Developer requiere el módulo Data Modeler, cuyo flujo de importación desde diccionario de datos no se resolvió dentro del tiempo disponible.
+
+**Resultado:** la consulta confirma las 10 tablas esperadas, coincidiendo con las mismas 10 de la Sección 6.12 (código).
+
+#### Conclusión
+
+Con esto se finaliza la creación de la base de datos `hornoraiz` de forma visual en Oracle SQL Developer, replicando las 10 tablas, las 8 relaciones y los tipos de datos definidos en la Sección 6 (código). A diferencia de MySQL Workbench y pgAdmin, SQL Developer no ofrece un diseñador gráfico para triggers, por lo que los tres triggers de `updated_at` se crearon por código como excepción documentada — mismo patrón aplicado en SQL Server (Sección 5). Con esto quedan completos los 4 motores de base de datos exigidos (MySQL, PostgreSQL, SQL Server, Oracle), cada uno con ambos métodos de creación: por código y de forma visual.
