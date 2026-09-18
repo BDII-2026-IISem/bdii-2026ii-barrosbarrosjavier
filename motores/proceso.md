@@ -1778,3 +1778,21 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 ![Consulta user_tables confirmando PAGO creada](reporte/oracle-visual-09-pago-tablas.png)
 
 **Resultado:** se creó la tabla `pago` mediante el diálogo "Crear Tabla" de SQL Developer, sin Foreign Key — `referencia_id` es polimórfica, igual que en los demás motores. El script generado coincide con el `CREATE TABLE pago` de la Sección 6.10 (código).
+
+### 7.10 Creación de la tabla `venta_detalle`
+
+![Columnas de venta_detalle configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-10-venta_detalle-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE venta_detalle generado](reporte/oracle-visual-10-venta_detalle-script.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando VENTA_DETALLE creada](reporte/oracle-visual-10-venta_detalle-tablas.png)
+
+**Resultado:** se creó la tabla `venta_detalle` mediante el diálogo "Crear Tabla" de SQL Developer, con dos Foreign Keys: `cabecera_id → venta(id)` e `item_id → producto(id)`. El script generado coincide con el `CREATE TABLE venta_detalle` de la Sección 6.9 (código).
