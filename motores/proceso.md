@@ -1796,3 +1796,35 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 ![Consulta user_tables confirmando VENTA_DETALLE creada](reporte/oracle-visual-10-venta_detalle-tablas.png)
 
 **Resultado:** se creó la tabla `venta_detalle` mediante el diálogo "Crear Tabla" de SQL Developer, con dos Foreign Keys: `cabecera_id → venta(id)` e `item_id → producto(id)`. El script generado coincide con el `CREATE TABLE venta_detalle` de la Sección 6.9 (código).
+
+### 7.11 Creación de la tabla `promocion`
+
+![Columnas de promocion configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-11-promocion-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE promocion generado](reporte/oracle-visual-11-promocion-script.png)
+
+**Nota metodológica — trigger `updated_at`:** al igual que en `receta` (Sección 7.4) y `lote_produccion` (Sección 7.6), se creó `trg_promocion_updated_at` por código en el Worksheet SQL.
+
+```sql
+CREATE OR REPLACE TRIGGER trg_promocion_updated_at
+BEFORE UPDATE ON promocion
+FOR EACH ROW
+BEGIN
+  :NEW.updated_at := SYSDATE;
+END;
+/
+```
+
+![Ejecución del trigger trg_promocion_updated_at sin errores](reporte/oracle-visual-11-promocion-trigger.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando PROMOCION creada](reporte/oracle-visual-11-promocion-tablas.png)
+
+**Resultado:** se creó la tabla `promocion` mediante el diálogo "Crear Tabla" de SQL Developer, sin ninguna Foreign Key ni tabla puente para la relación `Promocion N:M Producto`, respetando la misma decisión documentada en los demás motores. El trigger se creó por código, como excepción documentada. El script generado coincide con el `CREATE TABLE promocion` de la Sección 6.11 (código).
