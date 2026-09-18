@@ -1692,3 +1692,35 @@ SELECT table_name FROM user_tables ORDER BY table_name;
 ![Consulta user_tables confirmando RECETA_INSUMO creada](reporte/oracle-visual-05-receta_insumo-tablas.png)
 
 **Resultado:** se creó la tabla `receta_insumo` mediante el diálogo "Crear Tabla" de SQL Developer, con dos Foreign Keys configuradas mediante "Nueva Clave Ajena Restricción": `principal_id → receta(id)` y `relacionado_id → insumo(id)`, resolviendo la relación N:M entre `receta` e `insumo`. El script generado coincide con el `CREATE TABLE receta_insumo` de la Sección 6.5 (código).
+
+### 7.6 Creación de la tabla `lote_produccion`
+
+![Columnas de lote_produccion configuradas en el diálogo Crear Tabla de SQL Developer](reporte/oracle-visual-06-lote_produccion-columnas.png)
+
+**Script SQL generado por SQL Developer (pestaña DDL del diálogo):**
+
+![Script CREATE TABLE lote_produccion generado](reporte/oracle-visual-06-lote_produccion-script.png)
+
+**Nota metodológica — trigger `updated_at`:** al igual que en `receta` (Sección 7.4), se creó `trg_lote_produccion_updated_at` por código en el Worksheet SQL, ante la ausencia de un diseñador gráfico de triggers en SQL Developer.
+
+```sql
+CREATE OR REPLACE TRIGGER trg_lote_produccion_updated_at
+BEFORE UPDATE ON lote_produccion
+FOR EACH ROW
+BEGIN
+  :NEW.updated_at := SYSDATE;
+END;
+/
+```
+
+![Ejecución del trigger trg_lote_produccion_updated_at sin errores](reporte/oracle-visual-06-lote_produccion-trigger.png)
+
+**Evidencia de la creación:**
+
+```sql
+SELECT table_name FROM user_tables ORDER BY table_name;
+```
+
+![Consulta user_tables confirmando LOTE_PRODUCCION creada](reporte/oracle-visual-06-lote_produccion-tablas.png)
+
+**Resultado:** se creó la tabla `lote_produccion` mediante el diálogo "Crear Tabla" de SQL Developer, con la Foreign Key hacia `receta` y los valores predeterminados `1`/`SYSDATE` correspondientes. El trigger se creó por código, como excepción documentada. El script generado coincide con el `CREATE TABLE lote_produccion` de la Sección 6.6 (código).
