@@ -382,3 +382,37 @@ ORDER BY total_paid DESC;
 ![Ventas con total pagado mayor o igual a 100000, con HAVING](consultas/mysql-08-3-having.png)
 
 **Resultado:** 47 ventas cumplen la condición `SUM(PAY.amount) >= 100000`, encabezadas por la venta 52 con $942.692,25 en 6 pagos. El conjunto es un subconjunto de la Forma 1 (Sección 1.8), filtrado por el umbral establecido en `HAVING`.
+
+### 1.9 Subconsultas y teoría de conjuntos
+
+Mostrar los productos que no han sido vendidos (sin registro en `sale_details`/`sales`) dentro de un rango de fechas específico.
+
+**Forma 1 (subconsulta con NOT IN):**
+```sql
+SELECT * FROM products AS P
+WHERE P.id NOT IN (
+  SELECT SD.item_id FROM sale_details SD
+  JOIN sales S ON SD.header_id = S.id
+  WHERE S.date BETWEEN '2025-06-01' AND '2026-03-30'
+);
+```
+
+**Evidencia (imagen):**
+
+![Productos no vendidos - subconsulta NOT IN](consultas/mysql-09-1-not-in.png)
+
+**Resultado:** 35 productos sin ventas registradas en el rango de fechas indicado.
+
+**Forma 2 (LEFT JOIN con IS NULL):**
+```sql
+SELECT * FROM products AS P
+LEFT JOIN sale_details AS SD ON (P.id = SD.item_id)
+LEFT JOIN sales AS S ON (SD.header_id = S.id AND S.date BETWEEN '2025-06-01' AND '2026-03-30')
+WHERE S.id IS NULL;
+```
+
+**Evidencia (imagen):**
+
+![Productos no vendidos - LEFT JOIN con IS NULL](consultas/mysql-09-2-left-join.png)
+
+**Resultado:** mismos 35 productos que la Forma 1, confirmando la equivalencia entre ambas formas de expresar la teoría de conjuntos (diferencia entre `products` y los productos presentes en `sale_details`/`sales` dentro del rango).
