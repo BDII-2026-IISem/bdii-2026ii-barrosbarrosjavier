@@ -510,3 +510,85 @@ ALTER TABLE promotions RENAME COLUMN is_active TO status;
 ![Columnas renombradas — information_schema.columns por tabla](consultas/postgres-02-columnas-renombradas.png)
 
 **Resultado:** se verificaron los nombres finales mediante consulta a `information_schema.columns`. Aplica la misma advertencia documentada para MySQL (Sección 2): `status` no tiene un dominio de valores uniforme entre tablas — es booleano (`0`/`1`, ex `is_active`) en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions`, y texto de flujo de negocio (ex `estado`) en `sales`, `payments` y `supply_movements`.
+
+## 3. Carga de datos — tabla `products`
+
+Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, separado por `;`), sin necesidad de regenerarlo.
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en products - PostgreSQL](consultas/postgres-04-products-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `products` sin errores.
+
+## 4. Carga de datos — tabla `supplies`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en supplies - PostgreSQL](consultas/postgres-05-supplies-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `supplies` sin errores.
+
+## 5. Carga de datos — tabla `recipes`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en recipes - PostgreSQL](consultas/postgres-06-recipes-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `recipes` sin errores, respetando la Foreign Key hacia `products`.
+
+## 6. Carga de datos — tabla `recipe_supplies`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en recipe_supplies - PostgreSQL](consultas/postgres-07-recipe_supplies-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `recipe_supplies` sin errores, respetando las Foreign Keys hacia `recipes` e `supplies`.
+
+## 7. Carga de datos — tabla `production_batches`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en production_batches - PostgreSQL](consultas/postgres-08-production_batches-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `production_batches` sin errores, respetando la Foreign Key hacia `recipes`.
+
+## 8. Carga de datos — tabla `supply_movements`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en supply_movements - PostgreSQL](consultas/postgres-09-supply_movements-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `supply_movements` sin errores, con `production_batch_id` nullable importado correctamente como `NULL` en las filas vacías del CSV.
+
+## 9. Carga de datos — tabla `sales`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en sales - PostgreSQL](consultas/postgres-10-sales-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `sales` sin errores.
+
+## 10. Carga de datos — tabla `sale_details`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en sale_details - PostgreSQL](consultas/postgres-11-sale_details-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `sale_details` sin errores, respetando las Foreign Keys hacia `sales` y `products`.
+
+## 11. Carga de datos — tabla `payments`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en payments - PostgreSQL](consultas/postgres-12-payments-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `payments` sin errores.
+
+## 12. Carga de datos — tabla `promotions`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en promotions - PostgreSQL](consultas/postgres-13-promotions-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `promotions` sin errores.
