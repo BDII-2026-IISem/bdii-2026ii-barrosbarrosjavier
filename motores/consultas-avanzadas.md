@@ -767,3 +767,54 @@ ORDER BY PAY.date ASC;
 ![Productos vendidos con pago en rango de fechas - PostgreSQL](consultas/postgres-15-10-between-4tablas.png)
 
 **Resultado:** la consulta combina `products`, `sale_details`, `sales` y `payments` en una cadena de 4 tablas, con el mismo resultado que en MySQL (Sección 1.13.7): filas repetidas por venta cuando existen múltiples `sale_details` y múltiples `payments` asociados, mismo fenómeno esperado del JOIN entre dos relaciones 1:N.
+
+
+#### 2.14.8 Consultas con agrupamiento GROUP BY
+
+**Forma 1 (rango de fechas, con AVG):**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count, AVG(PAY.amount) AS avg_payment
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Total pagado por venta con AVG - PostgreSQL](consultas/postgres-15-11-groupby-avg.png)
+
+**Resultado:** 62 ventas agrupadas, mismo resultado que en MySQL (Sección 1.13.8), encabezadas por la venta 52 con $942.692,25 en 6 pagos. La columna `avg_payment` muestra mayor precisión decimal (`157115.375000000000`) que MySQL, comportamiento propio de `NUMERIC`/`AVG` en PostgreSQL.
+
+**Forma 2 (filtro por status y method):**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.status = 'completed' AND PAY.method = 'card'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Total pagado filtrando por status completed y method card - PostgreSQL](consultas/postgres-15-12-groupby-filtro.png)
+
+**Resultado:** 19 ventas, mismo resultado que en MySQL, encabezadas por la venta 52 con $328.898,26 en 2 pagos.
+
+**Con HAVING:**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+GROUP BY S.id, S.date
+HAVING SUM(PAY.amount) >= 100000
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Ventas con total pagado mayor o igual a 100000, con HAVING - PostgreSQL](consultas/postgres-15-13-having.png)
+
+**Resultado:** 47 ventas, mismo resultado que en MySQL, encabezadas por la venta 52 con $942.692,25 en 6 pagos.
