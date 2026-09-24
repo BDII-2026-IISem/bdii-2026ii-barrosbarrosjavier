@@ -852,3 +852,95 @@ WHERE S.id IS NULL;
 ![Productos no vendidos - LEFT JOIN con IS NULL - PostgreSQL](consultas/postgres-15-15-left-join.png)
 
 **Resultado:** mismos 35 productos que la Forma 1, confirmando la equivalencia entre ambas formas de expresar la teoría de conjuntos, tal como en MySQL.
+
+## 3. SQL Server
+
+### 3.1 Renombramiento de tablas
+
+Siguiendo la misma normativa aplicada en MySQL (Sección 1.1) y PostgreSQL (Sección 2.1), se renombraron las tablas de la base `hornoraiz` en SQL Server a plural e inglés. T-SQL no soporta `RENAME TABLE` ni `ALTER TABLE ... RENAME TO` — el renombrado se realiza mediante el procedimiento almacenado del sistema `sp_rename`.
+
+```sql
+EXEC sp_rename 'producto', 'products';
+EXEC sp_rename 'insumo', 'supplies';
+EXEC sp_rename 'receta', 'recipes';
+EXEC sp_rename 'receta_insumo', 'recipe_supplies';
+EXEC sp_rename 'lote_produccion', 'production_batches';
+EXEC sp_rename 'movimiento_insumo', 'supply_movements';
+EXEC sp_rename 'venta', 'sales';
+EXEC sp_rename 'venta_detalle', 'sale_details';
+EXEC sp_rename 'pago', 'payments';
+EXEC sp_rename 'promocion', 'promotions';
+```
+
+**Evidencia (imagen):**
+
+![Tablas renombradas correctamente en SQL Server](consultas/mssql-01-tablas-renombradas.png)
+
+**Resultado:** las 10 tablas quedaron renombradas a plural e inglés, sin pérdida de datos ni de las relaciones de Foreign Key existentes. `sp_rename` mostró la advertencia informativa estándar sobre el cambio de nombre de objetos, sin afectar el resultado.
+
+### 3.2 Renombramiento de columnas
+
+Al igual que las tablas, las columnas se renombraron con `sp_rename`, indicando `'tabla.columna_vieja'` como objeto y `'COLUMN'` como tipo, ya que este procedimiento también renombra otros tipos de objetos (índices, restricciones) y requiere esa distinción explícita.
+
+```sql
+EXEC sp_rename 'products.nombre', 'name', 'COLUMN';
+EXEC sp_rename 'products.descripcion', 'description', 'COLUMN';
+EXEC sp_rename 'products.precio', 'price', 'COLUMN';
+EXEC sp_rename 'products.is_active', 'status', 'COLUMN';
+
+EXEC sp_rename 'supplies.codigo', 'code', 'COLUMN';
+EXEC sp_rename 'supplies.nombre', 'name', 'COLUMN';
+EXEC sp_rename 'supplies.unidad_medida', 'unit_of_measure', 'COLUMN';
+EXEC sp_rename 'supplies.stock_minimo', 'min_stock', 'COLUMN';
+EXEC sp_rename 'supplies.is_active', 'status', 'COLUMN';
+
+EXEC sp_rename 'recipes.producto_id', 'product_id', 'COLUMN';
+EXEC sp_rename 'recipes.nombre', 'name', 'COLUMN';
+EXEC sp_rename 'recipes.descripcion', 'description', 'COLUMN';
+EXEC sp_rename 'recipes.is_active', 'status', 'COLUMN';
+
+EXEC sp_rename 'recipe_supplies.principal_id', 'main_id', 'COLUMN';
+EXEC sp_rename 'recipe_supplies.relacionado_id', 'related_id', 'COLUMN';
+EXEC sp_rename 'recipe_supplies.datos_relacion', 'relation_data', 'COLUMN';
+EXEC sp_rename 'recipe_supplies.is_active', 'status', 'COLUMN';
+
+EXEC sp_rename 'production_batches.receta_id', 'recipe_id', 'COLUMN';
+EXEC sp_rename 'production_batches.nombre', 'name', 'COLUMN';
+EXEC sp_rename 'production_batches.descripcion', 'description', 'COLUMN';
+EXEC sp_rename 'production_batches.is_active', 'status', 'COLUMN';
+
+EXEC sp_rename 'supply_movements.lote_produccion_id', 'production_batch_id', 'COLUMN';
+EXEC sp_rename 'supply_movements.insumo_id', 'supply_id', 'COLUMN';
+EXEC sp_rename 'supply_movements.tipo', 'type', 'COLUMN';
+EXEC sp_rename 'supply_movements.fecha', 'date', 'COLUMN';
+EXEC sp_rename 'supply_movements.cantidad', 'quantity', 'COLUMN';
+EXEC sp_rename 'supply_movements.observaciones', 'notes', 'COLUMN';
+EXEC sp_rename 'supply_movements.estado', 'status', 'COLUMN';
+
+EXEC sp_rename 'sales.cliente_id', 'client_id', 'COLUMN';
+EXEC sp_rename 'sales.fecha', 'date', 'COLUMN';
+EXEC sp_rename 'sales.impuestos', 'taxes', 'COLUMN';
+EXEC sp_rename 'sales.estado', 'status', 'COLUMN';
+
+EXEC sp_rename 'sale_details.cabecera_id', 'header_id', 'COLUMN';
+EXEC sp_rename 'sale_details.cantidad', 'quantity', 'COLUMN';
+EXEC sp_rename 'sale_details.valor_unitario', 'unit_price', 'COLUMN';
+EXEC sp_rename 'sale_details.observaciones', 'notes', 'COLUMN';
+
+EXEC sp_rename 'payments.referencia_tipo', 'reference_type', 'COLUMN';
+EXEC sp_rename 'payments.referencia_id', 'reference_id', 'COLUMN';
+EXEC sp_rename 'payments.metodo', 'method', 'COLUMN';
+EXEC sp_rename 'payments.monto', 'amount', 'COLUMN';
+EXEC sp_rename 'payments.fecha', 'date', 'COLUMN';
+EXEC sp_rename 'payments.estado', 'status', 'COLUMN';
+
+EXEC sp_rename 'promotions.nombre', 'name', 'COLUMN';
+EXEC sp_rename 'promotions.descripcion', 'description', 'COLUMN';
+EXEC sp_rename 'promotions.is_active', 'status', 'COLUMN';
+```
+
+**Evidencia (imagen):**
+
+![Columnas renombradas — sys.columns por tabla](consultas/mssql-02-columnas-renombradas.png)
+
+**Resultado:** se verificaron los nombres finales mediante consulta a `sys.columns` unida con `sys.tables`, confirmando que las 10 tablas quedaron con sus columnas en inglés, idénticas a MySQL y PostgreSQL. Aplica la misma advertencia documentada en las Secciones 1.2/2.2: `status` no tiene un dominio de valores uniforme entre tablas.
