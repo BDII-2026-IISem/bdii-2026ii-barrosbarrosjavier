@@ -1162,3 +1162,21 @@ WHERE S.status = 'cancelled' AND P.name LIKE 'Pan%';
 ![Combinación status cancelled y LIKE Pan - SQL Server](consultas/mssql-15-9-combinacion.png)
 
 **Resultado:** la consulta devolvió 4 registros, mismo resultado que en MySQL y PostgreSQL.
+
+#### 3.15.7 Consultas con filtros condicionales BETWEEN
+
+```sql
+SELECT P.name, P.sku, SD.quantity, SD.total, S.date, PAY.method
+FROM products P
+JOIN sale_details SD ON P.id = SD.item_id
+JOIN sales S ON SD.header_id = S.id
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+ORDER BY PAY.date ASC;
+```
+
+**Evidencia (imagen):**
+
+![Productos vendidos con pago en rango de fechas - SQL Server](consultas/mssql-15-10-between-4tablas.png)
+
+**Resultado:** la consulta combina `products`, `sale_details`, `sales` y `payments` en una cadena de 4 tablas, con el mismo resultado que en MySQL (Sección 1.13.7) y PostgreSQL (Sección 2.14.7): filas repetidas por venta cuando existen múltiples `sale_details` y múltiples `payments` asociados.
