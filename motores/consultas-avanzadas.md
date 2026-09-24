@@ -332,3 +332,53 @@ ORDER BY PAY.date ASC;
 ![Productos vendidos con pago en rango de fechas](consultas/mysql-07-1-between-4tablas.png)
 
 **Resultado:** la consulta combina `products`, `sale_details`, `sales` y `payments` en una cadena de 4 tablas, filtrando por `PAY.date` dentro del rango especificado. Se observan filas repetidas para una misma venta cuando esta tiene múltiples `sale_details` y múltiples `payments` asociados (por ejemplo, "Pan de leche Mini" y "Pastel de queso Individual" aparecen juntos varias veces): esto es el resultado esperado de un JOIN entre dos relaciones 1:N sobre la misma venta, no una duplicación de datos.
+
+### 1.8 Consultas con agrupamiento GROUP BY
+
+**Forma 1 (rango de fechas, con AVG):**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count, AVG(PAY.amount) AS avg_payment
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Total pagado por venta con AVG](consultas/mysql-08-1-groupby-avg.png)
+
+**Resultado:** 62 ventas agrupadas, con el total pagado por cada una (hasta 6 pagos por venta), su cantidad de pagos y el promedio, dentro del rango de fechas indicado. La venta 52 encabeza con $942.692,25 en 6 pagos.
+
+**Forma 2 (filtro por status y method):**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.status = 'completed' AND PAY.method = 'card'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Total pagado filtrando por status completed y method card](consultas/mysql-08-2-groupby-filtro.png)
+
+**Resultado:** 19 ventas cumplen la condición `status = 'completed' AND method = 'card'`, encabezadas por la venta 52 con $328.898,26 en 2 pagos.
+
+**Con HAVING:**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+GROUP BY S.id, S.date
+HAVING SUM(PAY.amount) >= 100000
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Ventas con total pagado mayor o igual a 100000, con HAVING](consultas/mysql-08-3-having.png)
+
+**Resultado:** 47 ventas cumplen la condición `SUM(PAY.amount) >= 100000`, encabezadas por la venta 52 con $942.692,25 en 6 pagos. El conjunto es un subconjunto de la Forma 1 (Sección 1.8), filtrado por el umbral establecido en `HAVING`.
