@@ -416,3 +416,97 @@ WHERE S.id IS NULL;
 ![Productos no vendidos - LEFT JOIN con IS NULL](consultas/mysql-09-2-left-join.png)
 
 **Resultado:** mismos 35 productos que la Forma 1, confirmando la equivalencia entre ambas formas de expresar la teoría de conjuntos (diferencia entre `products` y los productos presentes en `sale_details`/`sales` dentro del rango).
+
+## 2. Renombramiento de tablas y columnas en PostgreSQL
+
+Siguiendo la misma normativa aplicada en MySQL (Sección 1), se renombraron las tablas y columnas de la base `hornoraiz` en PostgreSQL a plural e inglés.
+
+### 2.1 Renombramiento de tablas
+
+A diferencia de MySQL, PostgreSQL no soporta `RENAME TABLE` para múltiples tablas en una sola sentencia; cada tabla requiere su propio `ALTER TABLE ... RENAME TO`.
+
+```sql
+ALTER TABLE producto RENAME TO products;
+ALTER TABLE insumo RENAME TO supplies;
+ALTER TABLE receta RENAME TO recipes;
+ALTER TABLE receta_insumo RENAME TO recipe_supplies;
+ALTER TABLE lote_produccion RENAME TO production_batches;
+ALTER TABLE movimiento_insumo RENAME TO supply_movements;
+ALTER TABLE venta RENAME TO sales;
+ALTER TABLE venta_detalle RENAME TO sale_details;
+ALTER TABLE pago RENAME TO payments;
+ALTER TABLE promocion RENAME TO promotions;
+```
+
+**Evidencia (imagen):**
+
+![Tablas renombradas correctamente en PostgreSQL](consultas/postgres-01-tablas-renombradas.png)
+
+**Resultado:** las 10 tablas quedaron renombradas a plural e inglés, sin pérdida de datos ni de las relaciones de Foreign Key existentes.
+
+### 2.2 Renombramiento de columnas
+
+Al igual que con las tablas, PostgreSQL exige una sentencia `ALTER TABLE` independiente por cada `RENAME COLUMN` — no admite agrupar varias columnas en una sola sentencia como sí permite MySQL.
+
+```sql
+ALTER TABLE products RENAME COLUMN nombre TO name;
+ALTER TABLE products RENAME COLUMN descripcion TO description;
+ALTER TABLE products RENAME COLUMN precio TO price;
+ALTER TABLE products RENAME COLUMN is_active TO status;
+
+ALTER TABLE supplies RENAME COLUMN codigo TO code;
+ALTER TABLE supplies RENAME COLUMN nombre TO name;
+ALTER TABLE supplies RENAME COLUMN unidad_medida TO unit_of_measure;
+ALTER TABLE supplies RENAME COLUMN stock_minimo TO min_stock;
+ALTER TABLE supplies RENAME COLUMN is_active TO status;
+
+ALTER TABLE recipes RENAME COLUMN producto_id TO product_id;
+ALTER TABLE recipes RENAME COLUMN nombre TO name;
+ALTER TABLE recipes RENAME COLUMN descripcion TO description;
+ALTER TABLE recipes RENAME COLUMN is_active TO status;
+
+ALTER TABLE recipe_supplies RENAME COLUMN principal_id TO main_id;
+ALTER TABLE recipe_supplies RENAME COLUMN relacionado_id TO related_id;
+ALTER TABLE recipe_supplies RENAME COLUMN datos_relacion TO relation_data;
+ALTER TABLE recipe_supplies RENAME COLUMN is_active TO status;
+
+ALTER TABLE production_batches RENAME COLUMN receta_id TO recipe_id;
+ALTER TABLE production_batches RENAME COLUMN nombre TO name;
+ALTER TABLE production_batches RENAME COLUMN descripcion TO description;
+ALTER TABLE production_batches RENAME COLUMN is_active TO status;
+
+ALTER TABLE supply_movements RENAME COLUMN lote_produccion_id TO production_batch_id;
+ALTER TABLE supply_movements RENAME COLUMN insumo_id TO supply_id;
+ALTER TABLE supply_movements RENAME COLUMN tipo TO type;
+ALTER TABLE supply_movements RENAME COLUMN fecha TO date;
+ALTER TABLE supply_movements RENAME COLUMN cantidad TO quantity;
+ALTER TABLE supply_movements RENAME COLUMN observaciones TO notes;
+ALTER TABLE supply_movements RENAME COLUMN estado TO status;
+
+ALTER TABLE sales RENAME COLUMN cliente_id TO client_id;
+ALTER TABLE sales RENAME COLUMN fecha TO date;
+ALTER TABLE sales RENAME COLUMN impuestos TO taxes;
+ALTER TABLE sales RENAME COLUMN estado TO status;
+
+ALTER TABLE sale_details RENAME COLUMN cabecera_id TO header_id;
+ALTER TABLE sale_details RENAME COLUMN cantidad TO quantity;
+ALTER TABLE sale_details RENAME COLUMN valor_unitario TO unit_price;
+ALTER TABLE sale_details RENAME COLUMN observaciones TO notes;
+
+ALTER TABLE payments RENAME COLUMN referencia_tipo TO reference_type;
+ALTER TABLE payments RENAME COLUMN referencia_id TO reference_id;
+ALTER TABLE payments RENAME COLUMN metodo TO method;
+ALTER TABLE payments RENAME COLUMN monto TO amount;
+ALTER TABLE payments RENAME COLUMN fecha TO date;
+ALTER TABLE payments RENAME COLUMN estado TO status;
+
+ALTER TABLE promotions RENAME COLUMN nombre TO name;
+ALTER TABLE promotions RENAME COLUMN descripcion TO description;
+ALTER TABLE promotions RENAME COLUMN is_active TO status;
+```
+
+**Evidencia (imagen):**
+
+![Columnas renombradas — information_schema.columns por tabla](consultas/postgres-02-columnas-renombradas.png)
+
+**Resultado:** se verificaron los nombres finales mediante consulta a `information_schema.columns`. Aplica la misma advertencia documentada para MySQL (Sección 2): `status` no tiene un dominio de valores uniforme entre tablas — es booleano (`0`/`1`, ex `is_active`) en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions`, y texto de flujo de negocio (ex `estado`) en `sales`, `payments` y `supply_movements`.
