@@ -314,3 +314,21 @@ SELECT * FROM products AS P WHERE P.description LIKE CONCAT('%','chocolate','%')
 ![Producto cuya descripción contiene chocolate](consultas/mysql-06-2-like-chocolate.png)
 
 **Resultado:** la consulta devolvió 1 registro (`Torta de chocolate Mini clasico`), usando `CONCAT` para construir el patrón `%chocolate%` y localizar la coincidencia dentro de la descripción, sin importar su posición en el texto.
+
+### 1.7 Consultas con filtros condicionales BETWEEN
+
+```sql
+SELECT P.name, P.sku, SD.quantity, SD.total, S.date, PAY.method
+FROM products P
+JOIN sale_details SD ON P.id = SD.item_id
+JOIN sales S ON SD.header_id = S.id
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+ORDER BY PAY.date ASC;
+```
+
+**Evidencia (imagen):**
+
+![Productos vendidos con pago en rango de fechas](consultas/mysql-07-1-between-4tablas.png)
+
+**Resultado:** la consulta combina `products`, `sale_details`, `sales` y `payments` en una cadena de 4 tablas, filtrando por `PAY.date` dentro del rango especificado. Se observan filas repetidas para una misma venta cuando esta tiene múltiples `sale_details` y múltiples `payments` asociados (por ejemplo, "Pan de leche Mini" y "Pastel de queso Individual" aparecen juntos varias veces): esto es el resultado esperado de un JOIN entre dos relaciones 1:N sobre la misma venta, no una duplicación de datos.
