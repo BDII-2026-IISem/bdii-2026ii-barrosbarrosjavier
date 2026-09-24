@@ -709,3 +709,43 @@ WHERE S.status = 'cancelled';
 ![Filtro JOIN con status = cancelled - PostgreSQL](consultas/postgres-15-6-status-cancelled.png)
 
 **Resultado:** la consulta devolvió 10 registros con `status = 'cancelled'`, mismo resultado que en MySQL (Sección 1.13.5).
+
+#### 2.14.6 Consultas con filtros condicional LIKE
+
+```sql
+SELECT * FROM products AS P WHERE P.name LIKE 'Pan%';
+```
+
+**Evidencia (imagen):**
+
+![Productos cuyo nombre empieza con Pan - PostgreSQL](consultas/postgres-15-7-like-pan.png)
+
+**Resultado:** la consulta devolvió 28 registros cuyo `name` comienza con "Pan", mismo resultado que en MySQL (Sección 1.13.6).
+
+**Mostrar los productos cuya descripción contenga la palabra "chocolate":**
+
+```sql
+SELECT * FROM products AS P WHERE P.description LIKE CONCAT('%','chocolate','%');
+```
+
+**Evidencia (imagen):**
+
+![Producto cuya descripción contiene chocolate - PostgreSQL](consultas/postgres-15-8-like-chocolate.png)
+
+**Resultado:** la consulta devolvió 1 registro (`Torta de chocolate Mini clasico`), mismo resultado que en MySQL.
+
+**Combinación (status = cancelled y name LIKE 'Pan%'):**
+
+```sql
+SELECT S.date, S.status, P.name
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id)
+JOIN products AS P ON (P.id = SD.item_id)
+WHERE S.status = 'cancelled' AND P.name LIKE 'Pan%';
+```
+
+**Evidencia (imagen):**
+
+![Combinación status cancelled y LIKE Pan - PostgreSQL](consultas/postgres-15-9-combinacion.png)
+
+**Resultado:** la consulta devolvió 4 registros, coincidiendo con productos cuyo nombre empieza con "Pan" dentro de las ventas canceladas de la Sección 2.14.5.
