@@ -1180,3 +1180,87 @@ ORDER BY PAY.date ASC;
 ![Productos vendidos con pago en rango de fechas - SQL Server](consultas/mssql-15-10-between-4tablas.png)
 
 **Resultado:** la consulta combina `products`, `sale_details`, `sales` y `payments` en una cadena de 4 tablas, con el mismo resultado que en MySQL (Sección 1.13.7) y PostgreSQL (Sección 2.14.7): filas repetidas por venta cuando existen múltiples `sale_details` y múltiples `payments` asociados.
+
+#### 3.15.8 Consultas con agrupamiento GROUP BY
+
+**Forma 1 (rango de fechas, con AVG):**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count, AVG(PAY.amount) AS avg_payment
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Total pagado por venta con AVG - SQL Server](consultas/mssql-15-11-groupby-avg.png)
+
+**Resultado:** 62 ventas agrupadas, mismo resultado que en MySQL (Sección 1.13.8) y PostgreSQL (Sección 2.14.8), encabezadas por la venta 52 con $942.692,25 en 6 pagos.
+
+**Forma 2 (filtro por status y method):**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.status = 'completed' AND PAY.method = 'card'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Total pagado filtrando por status completed y method card - SQL Server](consultas/mssql-15-12-groupby-filtro.png)
+
+**Resultado:** 19 ventas, mismo resultado que en MySQL y PostgreSQL, encabezadas por la venta 52 con $328.898,26 en 2 pagos.
+
+**Con HAVING:**
+```sql
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+GROUP BY S.id, S.date
+HAVING SUM(PAY.amount) >= 100000
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Ventas con total pagado mayor o igual a 100000, con HAVING - SQL Server](consultas/mssql-15-13-having.png)
+
+**Resultado:** 47 ventas, mismo resultado que en MySQL y PostgreSQL, encabezadas por la venta 52 con $942.692,25 en 6 pagos.
+
+#### 3.15.9 Subconsultas y teoría de conjuntos
+
+Mostrar los productos que no han sido vendidos (sin registro en `sale_details`/`sales`) dentro de un rango de fechas específico.
+
+**Forma 1 (subconsulta con NOT IN):**
+```sql
+SELECT * FROM products AS P
+WHERE P.id NOT IN (
+  SELECT SD.item_id FROM sale_details SD
+  JOIN sales S ON SD.header_id = S.id
+  WHERE S.date BETWEEN '2025-06-01' AND '2026-03-30'
+);
+```
+
+**Evidencia (imagen):**
+
+![Productos no vendidos - subconsulta NOT IN - SQL Server](consultas/mssql-15-14-not-in.png)
+
+**Resultado:** 35 productos sin ventas registradas en el rango de fechas indicado, mismo resultado que en MySQL (Sección 1.13.9) y PostgreSQL (Sección 2.14.9).
+
+**Forma 2 (LEFT JOIN con IS NULL):**
+```sql
+SELECT * FROM products AS P
+LEFT JOIN sale_details AS SD ON (P.id = SD.item_id)
+LEFT JOIN sales AS S ON (SD.header_id = S.id AND S.date BETWEEN '2025-06-01' AND '2026-03-30')
+WHERE S.id IS NULL;
+```
+
+**Evidencia (imagen):**
+
+![Productos no vendidos - LEFT JOIN con IS NULL - SQL Server](consultas/mssql-15-15-left-join.png)
+
+**Resultado:** mismos 35 productos que la Forma 1, confirmando la equivalencia entre ambas formas de expresar la teoría de conjuntos, consistente con MySQL y PostgreSQL.
