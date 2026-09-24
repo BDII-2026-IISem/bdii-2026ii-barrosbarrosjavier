@@ -1043,3 +1043,15 @@ UNION ALL SELECT 'promotions', SUM(CASE WHEN status=1 THEN 1 ELSE 0 END), SUM(CA
 ![Conteo activos/inactivos en SQL Server tras la carga](consultas/mssql-14-status-verificado.png)
 
 **Resultado:** a diferencia de PostgreSQL (Sección 2.13), el asistente gráfico de DBeaver sí convirtió correctamente los valores `1`/`0` del CSV al tipo `BIT` nativo de SQL Server en las 6 tablas booleanas, sin necesidad de recurrir a una vía alterna de importación. Proporciones obtenidas: `products` 90/10, `supplies` 89/11, `recipes` 95/5, `recipe_supplies` 93/7, `production_batches` 88/12, `promotions` 60/40 — idénticas a MySQL y a la corrección final de PostgreSQL.
+
+#### 3.15.1 Mostrar algunos de los registros de la tabla `products`
+
+```sql
+SELECT sku, name, price, status FROM products;
+```
+
+**Evidencia (imagen):**
+
+![Registros de la tabla products - SQL Server](consultas/mssql-15-1-products.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `products`, mismo resultado que en MySQL (Sección 1.13.1) y PostgreSQL (Sección 2.14.1).
