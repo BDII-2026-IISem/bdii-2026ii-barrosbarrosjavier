@@ -290,3 +290,27 @@ WHERE S.status = 'cancelled';
 ![Filtro JOIN con status = cancelled](consultas/mysql-05-2-status-cancelled.png)
 
 **Resultado:** la consulta devolvió 10 registros con `status = 'cancelled'`, usando la forma JOIN en vez de WHERE para la relación entre tablas.
+
+### 1.6 Consultas con filtros condicional LIKE
+
+```sql
+SELECT * FROM products AS P WHERE P.name LIKE 'Pan%';
+```
+
+**Evidencia (imagen):**
+
+![Productos cuyo nombre empieza con Pan](consultas/mysql-06-1-like-pan.png)
+
+**Resultado:** la consulta devolvió 28 registros cuyo `name` comienza con "Pan" (Pan de yema, Pan integral, Pan de leche, Panettone, etc.), aplicando el operador `LIKE` con comodín al final del patrón.
+
+**Mostrar los productos cuya descripción contenga la palabra "chocolate":**
+
+```sql
+SELECT * FROM products AS P WHERE P.description LIKE CONCAT('%','chocolate','%');
+```
+
+**Evidencia (imagen):**
+
+![Producto cuya descripción contiene chocolate](consultas/mysql-06-2-like-chocolate.png)
+
+**Resultado:** la consulta devolvió 1 registro (`Torta de chocolate Mini clasico`), usando `CONCAT` para construir el patrón `%chocolate%` y localizar la coincidencia dentro de la descripción, sin importar su posición en el texto.
