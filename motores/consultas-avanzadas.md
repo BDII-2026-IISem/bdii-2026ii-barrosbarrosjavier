@@ -233,3 +233,17 @@ SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
 ![Ventas ordenadas descendentemente por fecha](consultas/mysql-02-1-sales.png)
 
 **Resultado:** la consulta devolvió los 100 registros de `sales` ordenados de la fecha más reciente (2026-03-27) a la más antigua (2025-06-02), confirmando que `ORDER BY date DESC` funciona correctamente sobre los datos cargados en la Sección 9.
+
+### 1.3 Consultas a múltiples tablas mediante WHERE
+
+```sql
+SELECT *
+FROM sale_details SD, sales S
+WHERE S.id = SD.header_id;
+```
+
+**Evidencia (imagen):**
+
+![Join de sale_details y sales mediante WHERE](consultas/mysql-03-1-sale_details_sales_where.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `sale_details` combinados con su venta correspondiente en `sales`, mediante la condición `S.id = SD.header_id` en la cláusula WHERE.
