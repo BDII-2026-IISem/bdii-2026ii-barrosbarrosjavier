@@ -642,3 +642,29 @@ SELECT sku, name, price, status FROM products;
 ![Registros de la tabla products - PostgreSQL](consultas/postgres-15-1-products.png)
 
 **Resultado:** la consulta devolvió los 100 registros de `products` con `status` en formato `true`/`false` (tipo nativo `boolean` de PostgreSQL, a diferencia de `1`/`0` en MySQL), coincidiendo con los mismos productos activos/inactivos verificados tras la corrección de la Sección 2.13.
+
+#### 2.14.2 Mostrar de forma ordenada (DESC) las ventas desde su comienzo
+
+```sql
+SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
+```
+
+**Evidencia (imagen):**
+
+![Ventas ordenadas descendentemente por fecha - PostgreSQL](consultas/postgres-15-2-sales.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `sales` ordenados de la fecha más reciente (2026-03-27) a la más antigua (2025-06-02), mismos valores y orden que en MySQL (Sección 1.13.2). La columna `date` se muestra con precisión de milisegundos (`.000`), propia del tipo `timestamp` de PostgreSQL.
+
+#### 2.14.3 Consultas a múltiples tablas mediante WHERE
+
+```sql
+SELECT *
+FROM sale_details SD, sales S
+WHERE S.id = SD.header_id;
+```
+
+**Evidencia (imagen):**
+
+![Join de sale_details y sales mediante WHERE - PostgreSQL](consultas/postgres-15-3-sale_details_sales_where.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `sale_details` combinados con su venta correspondiente en `sales`, mismos resultados que en MySQL (Sección 1.13.3).
