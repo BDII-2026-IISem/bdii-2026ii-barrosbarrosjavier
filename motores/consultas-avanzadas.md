@@ -944,3 +944,102 @@ EXEC sp_rename 'promotions.is_active', 'status', 'COLUMN';
 ![Columnas renombradas — sys.columns por tabla](consultas/mssql-02-columnas-renombradas.png)
 
 **Resultado:** se verificaron los nombres finales mediante consulta a `sys.columns` unida con `sys.tables`, confirmando que las 10 tablas quedaron con sus columnas en inglés, idénticas a MySQL y PostgreSQL. Aplica la misma advertencia documentada en las Secciones 1.2/2.2: `status` no tiene un dominio de valores uniforme entre tablas.
+
+### 3.4 Carga de datos — tabla `products`
+
+Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, separado por `;`), sin necesidad de regenerarlo.
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en products - SQL Server](consultas/mssql-04-products-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `products` sin errores.
+
+### 3.5 Carga de datos — tabla `supplies`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en supplies - SQL Server](consultas/mssql-05-supplies-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `supplies` sin errores.
+
+### 3.6 Carga de datos — tabla `recipes`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en recipes - SQL Server](consultas/mssql-06-recipes-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `recipes` sin errores, respetando la Foreign Key hacia `products`.
+
+### 3.7 Carga de datos — tabla `recipe_supplies`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en recipe_supplies - SQL Server](consultas/mssql-07-recipe_supplies-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `recipe_supplies` sin errores, respetando las Foreign Keys hacia `recipes` e `supplies`.
+
+### 3.8 Carga de datos — tabla `production_batches`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en production_batches - SQL Server](consultas/mssql-08-production_batches-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `production_batches` sin errores, respetando la Foreign Key hacia `recipes`.
+
+### 3.9 Carga de datos — tabla `supply_movements`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en supply_movements - SQL Server](consultas/mssql-09-supply_movements-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `supply_movements` sin errores, con `production_batch_id` nullable importado correctamente como `NULL` en las filas vacías del CSV.
+
+### 3.10 Carga de datos — tabla `sales`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en sales - SQL Server](consultas/mssql-10-sales-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `sales` sin errores.
+
+### 3.11 Carga de datos — tabla `sale_details`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en sale_details - SQL Server](consultas/mssql-11-sale_details-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `sale_details` sin errores, respetando las Foreign Keys hacia `sales` y `products`.
+
+### 3.12 Carga de datos — tabla `payments`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en payments - SQL Server](consultas/mssql-12-payments-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `payments` sin errores.
+
+### 3.13 Carga de datos — tabla `promotions`
+
+**Evidencia (imagen):**
+
+![100 registros importados correctamente en promotions - SQL Server](consultas/mssql-13-promotions-importados.png)
+
+**Resultado:** se importaron los 100 registros en la tabla `promotions` sin errores.
+
+### 3.14 Verificación de la conversión de `status` (tipo `BIT`)
+
+```sql
+SELECT 'products' t, SUM(CASE WHEN status=1 THEN 1 ELSE 0 END) AS activos, SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) AS inactivos FROM products
+UNION ALL SELECT 'supplies', SUM(CASE WHEN status=1 THEN 1 ELSE 0 END), SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) FROM supplies
+UNION ALL SELECT 'recipes', SUM(CASE WHEN status=1 THEN 1 ELSE 0 END), SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) FROM recipes
+UNION ALL SELECT 'recipe_supplies', SUM(CASE WHEN status=1 THEN 1 ELSE 0 END), SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) FROM recipe_supplies
+UNION ALL SELECT 'production_batches', SUM(CASE WHEN status=1 THEN 1 ELSE 0 END), SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) FROM production_batches
+UNION ALL SELECT 'promotions', SUM(CASE WHEN status=1 THEN 1 ELSE 0 END), SUM(CASE WHEN status=0 THEN 1 ELSE 0 END) FROM promotions;
+```
+
+**Evidencia (imagen):**
+
+![Conteo activos/inactivos en SQL Server tras la carga](consultas/mssql-14-status-verificado.png)
+
+**Resultado:** a diferencia de PostgreSQL (Sección 2.13), el asistente gráfico de DBeaver sí convirtió correctamente los valores `1`/`0` del CSV al tipo `BIT` nativo de SQL Server en las 6 tablas booleanas, sin necesidad de recurrir a una vía alterna de importación. Proporciones obtenidas: `products` 90/10, `supplies` 89/11, `recipes` 95/5, `recipe_supplies` 93/7, `production_batches` 88/12, `promotions` 60/40 — idénticas a MySQL y a la corrección final de PostgreSQL.
