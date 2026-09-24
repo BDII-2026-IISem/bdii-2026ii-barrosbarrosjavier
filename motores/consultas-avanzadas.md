@@ -682,3 +682,30 @@ JOIN sale_details AS SD ON (S.id = SD.header_id);
 ![Join de sales y sale_details mediante JOIN - PostgreSQL](consultas/postgres-15-4-sales_sale_details_join.png)
 
 **Resultado:** la consulta devolvió los 100 registros combinando `sales` y `sale_details` mediante `JOIN ... ON`, con el mismo resultado que la Sección 2.14.3 (forma WHERE) y que MySQL (Sección 1.13.4).
+
+#### 2.14.5 Condiciones en las consultas / filtros
+
+```sql
+SELECT *
+FROM sale_details SD, sales S
+WHERE S.id = SD.header_id AND S.status = 'paid';
+```
+
+**Evidencia (imagen):**
+
+![Filtro WHERE con status = paid - PostgreSQL](consultas/postgres-15-5-status-paid.png)
+
+**Resultado:** la consulta devolvió 82 registros con `status = 'paid'`, mismo resultado que en MySQL (Sección 1.13.5).
+
+```sql
+SELECT S.date, S.status, SD.*
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id)
+WHERE S.status = 'cancelled';
+```
+
+**Evidencia (imagen):**
+
+![Filtro JOIN con status = cancelled - PostgreSQL](consultas/postgres-15-6-status-cancelled.png)
+
+**Resultado:** la consulta devolvió 10 registros con `status = 'cancelled'`, mismo resultado que en MySQL (Sección 1.13.5).
