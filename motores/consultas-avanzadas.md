@@ -261,3 +261,32 @@ JOIN sale_details AS SD ON (S.id = SD.header_id);
 ![Join de sales y sale_details mediante JOIN](consultas/mysql-04-1-sales_sale_details_join.png)
 
 **Resultado:** la consulta devolvió los 100 registros combinando `sales` y `sale_details` mediante `JOIN ... ON`, con el mismo resultado que la Sección 1.3 (forma WHERE), confirmando que ambas sintaxis son equivalentes para esta relación.
+
+### 1.5 Condiciones en las consultas / filtros
+
+Para las condiciones se utiliza la cláusula WHERE. Se realiza la misma consulta de la Sección 1.3/1.4, filtrando por un estado específico de `sales.status`.
+
+```sql
+SELECT *
+FROM sale_details SD, sales S
+WHERE S.id = SD.header_id AND S.status = 'paid';
+```
+
+**Evidencia (imagen):**
+
+![Filtro WHERE con status = paid](consultas/mysql-05-1-status-paid.png)
+
+**Resultado:** la consulta devolvió 82 registros con `status = 'paid'`, filtrando del total de 100 combinaciones `sale_details`/`sales`.
+
+```sql
+SELECT S.date, S.status, SD.*
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id)
+WHERE S.status = 'cancelled';
+```
+
+**Evidencia (imagen):**
+
+![Filtro JOIN con status = cancelled](consultas/mysql-05-2-status-cancelled.png)
+
+**Resultado:** la consulta devolvió 10 registros con `status = 'cancelled'`, usando la forma JOIN en vez de WHERE para la relación entre tablas.
