@@ -1081,3 +1081,17 @@ WHERE S.id = SD.header_id;
 ![Join de sale_details y sales mediante WHERE - SQL Server](consultas/mssql-15-3-sale_details_sales_where.png)
 
 **Resultado:** la consulta devolvió los 100 registros de `sale_details` combinados con su venta correspondiente en `sales`, mismo resultado que en MySQL (Sección 1.13.3) y PostgreSQL (Sección 2.14.3).
+
+#### 3.15.4 Consultas a múltiples tablas mediante JOIN
+
+```sql
+SELECT S.date, S.status, SD.*
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id);
+```
+
+**Evidencia (imagen):**
+
+![Join de sales y sale_details mediante JOIN - SQL Server](consultas/mssql-15-4-sales_sale_details_join.png)
+
+**Resultado:** la consulta devolvió los 100 registros combinando `sales` y `sale_details` mediante `JOIN ... ON`, mismo resultado que en MySQL (Sección 1.13.4) y PostgreSQL (Sección 2.14.4).
