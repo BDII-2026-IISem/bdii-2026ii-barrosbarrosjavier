@@ -1055,3 +1055,15 @@ SELECT sku, name, price, status FROM products;
 ![Registros de la tabla products - SQL Server](consultas/mssql-15-1-products.png)
 
 **Resultado:** la consulta devolvió los 100 registros de `products`, mismo resultado que en MySQL (Sección 1.13.1) y PostgreSQL (Sección 2.14.1).
+
+#### 3.15.2 Mostrar de forma ordenada (DESC) las ventas desde su comienzo
+
+```sql
+SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
+```
+
+**Evidencia (imagen):**
+
+![Ventas ordenadas descendentemente por fecha - SQL Server](consultas/mssql-15-2-sales.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `sales` ordenados de la fecha más reciente a la más antigua, mismo resultado que en MySQL (Sección 1.13.2) y PostgreSQL (Sección 2.14.2).
