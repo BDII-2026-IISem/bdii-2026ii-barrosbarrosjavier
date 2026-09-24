@@ -221,3 +221,15 @@ SELECT sku, name, price, status FROM products;
 ![Registros de la tabla products](consultas/mysql-01-1-products.png)
 
 **Resultado:** la consulta devolvió los 100 registros de `products` con sus columnas `sku`, `name`, `price` y `status`, confirmando la carga de datos realizada en la Sección 3.
+
+### 1.2 Mostrar de forma ordenada (DESC) las ventas desde su comienzo
+
+```sql
+SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
+```
+
+**Evidencia (imagen):**
+
+![Ventas ordenadas descendentemente por fecha](consultas/mysql-02-1-sales.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `sales` ordenados de la fecha más reciente (2026-03-27) a la más antigua (2025-06-02), confirmando que `ORDER BY date DESC` funciona correctamente sobre los datos cargados en la Sección 9.
