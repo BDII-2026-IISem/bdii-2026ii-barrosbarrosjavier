@@ -630,3 +630,15 @@ TRUNCATE TABLE recipe_supplies, production_batches, recipes, supplies, promotion
 ![Conteo activos/inactivos tras reimportación con psql](consultas/postgres-14-status-corregido.png)
 
 **Resultado:** tras la reimportación por `\copy`, la conversión de `status` se realizó correctamente, obteniendo proporciones reales de activos/inactivos en las 6 tablas (`products`: 90/10, `supplies`: 89/11, `recipes`: 95/5, `recipe_supplies`: 93/7, `production_batches`: 88/12, `promotions`: 60/40), a diferencia del `0/100` uniforme que arrojó el asistente gráfico.
+
+#### 2.14.1 Mostrar algunos de los registros de la tabla `products`
+
+```sql
+SELECT sku, name, price, status FROM products;
+```
+
+**Evidencia (imagen):**
+
+![Registros de la tabla products - PostgreSQL](consultas/postgres-15-1-products.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `products` con `status` en formato `true`/`false` (tipo nativo `boolean` de PostgreSQL, a diferencia de `1`/`0` en MySQL), coincidiendo con los mismos productos activos/inactivos verificados tras la corrección de la Sección 2.13.
