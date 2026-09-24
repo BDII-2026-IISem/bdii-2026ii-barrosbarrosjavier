@@ -1,6 +1,8 @@
 # Consultas Avanzadas — HornoRaíz
 
-## 1. Renombramiento de tablas y columnas a inglés (normativa del profesor)
+## 1. MySQL
+
+### 1.1 Renombramiento de tablas a inglés (normativa del profesor)
 
 Como requisito para esta tarea, el profesor exige que las tablas estén nombradas en plural y en inglés. Se ejecutó el siguiente script en el editor SQL de DBeaver, sobre la base `hornoraiz` en MySQL, renombrando las 10 tablas del modelo:
 
@@ -26,9 +28,9 @@ SHOW TABLES;
 
 **Resultado:** `SHOW TABLES` confirmó las 10 tablas con sus nuevos nombres en plural e inglés (`products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches`, `supply_movements`, `sales`, `sale_details`, `payments`, `promotions`), sin pérdida de datos ni de las relaciones de Foreign Key existentes, ya que `RENAME TABLE` en MySQL preserva automáticamente las restricciones y los índices asociados.
 
-## 2. Renombramiento de columnas a inglés
+### 1.2 Renombramiento de columnas a inglés
 
-Con las 10 tablas ya renombradas (Sección 1), se renombraron sus columnas siguiendo el mismo criterio de idioma. Además del renombrado de nombres propios de columna (`nombre → name`, `descripcion → description`, `fecha → date`, `cantidad → quantity`, `estado`/`is_active → status`, etc.), se aplicó una convención adicional: la columna booleana `is_active`, presente en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions`, se renombró también a `status`, unificando su nombre con la columna `status` de flujo de negocio ya existente en `sales`, `payments` y `supply_movements` (renombrada desde `estado`).
+Con las 10 tablas ya renombradas (Sección 1.1), se renombraron sus columnas siguiendo el mismo criterio de idioma. Además del renombrado de nombres propios de columna (`nombre → name`, `descripcion → description`, `fecha → date`, `cantidad → quantity`, `estado`/`is_active → status`, etc.), se aplicó una convención adicional: la columna booleana `is_active`, presente en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions`, se renombró también a `status`, unificando su nombre con la columna `status` de flujo de negocio ya existente en `sales`, `payments` y `supply_movements` (renombrada desde `estado`).
 
 ```sql
 ALTER TABLE products
@@ -102,13 +104,13 @@ ALTER TABLE promotions RENAME COLUMN is_active TO status;
 
 ![Columnas renombradas — INFORMATION_SCHEMA.COLUMNS por tabla](consultas/02-columnas-renombradas.png)
 
-**Resultado:** se verificaron los nombres finales mediante consulta a `INFORMATION_SCHEMA.COLUMNS`, confirmando que las 10 tablas quedaron con sus columnas en inglés. Se documenta como advertencia para las consultas siguientes: la columna `status` no tiene un tipo ni dominio de valores uniforme entre tablas — es `NUMBER(1)`/booleano (`0`/`1`, ex `is_active`) en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions`, pero es texto de estado de flujo de negocio (ex `estado`) en `sales`, `payments` y `supply_movements`. Cualquier consulta que filtre o compare por `status` debe considerar esta diferencia según la tabla involucrada.
+**Resultado:** se verificaron los nombres finales mediante consulta a `INFORMATION_SCHEMA.COLUMNS`, confirmando que las 10 tablas quedaron con sus columnas en inglés. Se documenta como advertencia para las consultas siguientes: la columna `status` no tiene un tipo ni dominio de valores uniforme entre tablas — es booleano (`0`/`1`, ex `is_active`) en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions`, pero es texto de estado de flujo de negocio (ex `estado`) en `sales`, `payments` y `supply_movements`. Cualquier consulta que filtre o compare por `status` debe considerar esta diferencia según la tabla involucrada.
 
 **Nota adicional:** `sale_details` no tiene columna `status` — no existía `is_active` ni `estado` en su definición original, y esa ausencia se mantuvo sin cambios.
 
-## 3. Carga de datos — tabla `products`
+### 1.3 Carga de datos — tabla `products`
 
-Se generaron 100 registros de prueba para la tabla `products`, en un archivo CSV separado por `;`, con las columnas `id`, `sku`, `name`, `description`, `price`, `status`, correspondientes al esquema ya renombrado en la Sección 2.
+Se generaron 100 registros de prueba para la tabla `products`, en un archivo CSV separado por `;`, con las columnas `id`, `sku`, `name`, `description`, `price`, `status`, correspondientes al esquema ya renombrado en la Sección 1.2.
 
 **Evidencia (imagen):**
 
@@ -116,7 +118,7 @@ Se generaron 100 registros de prueba para la tabla `products`, en un archivo CSV
 
 **Resultado:** se importaron los 100 registros en la tabla `products` sin errores, configurando el delimitador `;` en el asistente de importación de DBeaver.
 
-## 4. Carga de datos — tabla `supplies`
+### 1.4 Carga de datos — tabla `supplies`
 
 Se generaron 100 registros de prueba para la tabla `supplies`, en un archivo CSV separado por `;`, con las columnas `id`, `code`, `name`, `unit_of_measure`, `min_stock`, `status`.
 
@@ -126,9 +128,9 @@ Se generaron 100 registros de prueba para la tabla `supplies`, en un archivo CSV
 
 **Resultado:** se importaron los 100 registros en la tabla `supplies` sin errores, configurando el delimitador `;` en el asistente de importación de DBeaver.
 
-## 5. Carga de datos — tabla `recipes`
+### 1.5 Carga de datos — tabla `recipes`
 
-Se generaron 100 registros de prueba para la tabla `recipes`, en un archivo CSV separado por `;`, con las columnas `id`, `product_id`, `name`, `description`, `status`, `created_at`, `updated_at`. Los valores de `product_id` se generaron dentro del rango 1-100, referenciando los productos ya cargados en la Sección 3, respetando la Foreign Key hacia `products`.
+Se generaron 100 registros de prueba para la tabla `recipes`, en un archivo CSV separado por `;`, con las columnas `id`, `product_id`, `name`, `description`, `status`, `created_at`, `updated_at`. Los valores de `product_id` se generaron dentro del rango 1-100, referenciando los productos ya cargados en la Sección 1.3, respetando la Foreign Key hacia `products`.
 
 **Resultado:** se importaron los 100 registros en la tabla `recipes` sin errores. Se incluyeron 20 productos con una segunda receta asociada, reflejando la relación `Producto 1:N Receta` de la narrativa del proyecto (donde una sola versión de receta puede estar vigente por producto); estas recetas alternativas se marcaron con `status = 0` para simular versiones no vigentes.
 
@@ -136,19 +138,19 @@ Se generaron 100 registros de prueba para la tabla `recipes`, en un archivo CSV 
 
 ![100 registros importados correctamente en recipes](consultas/05-recipes-importados.png)
 
-## 6. Carga de datos — tabla `recipe_supplies`
+### 1.6 Carga de datos — tabla `recipe_supplies`
 
 Se generaron 100 registros de prueba para la tabla `recipe_supplies`, en un archivo CSV separado por `;`, con las columnas `id`, `main_id`, `related_id`, `relation_data`, `status`. Los valores de `main_id` referencian `recipes(id)` y `related_id` referencian `supplies(id)`, ambos en el rango 1-100, sin pares repetidos, resolviendo la relación N:M entre `recipes` y `supplies`.
 
-**Resultado:** se importaron los 100 registros sin errores. La columna `relation_data` se generó como texto libre combinando cantidad y unidad de medida (ej. `"6.93 l"`), dado que su tipo (`VARCHAR2(255)`) no define una estructura fija.
+**Resultado:** se importaron los 100 registros sin errores. La columna `relation_data` se generó como texto libre combinando cantidad y unidad de medida (ej. `"6.93 l"`), dado que su tipo no define una estructura fija.
 
 **Evidencia (imagen):**
 
 ![100 registros importados correctamente en recipe_supplies](consultas/06-recipe_supplies-importados.png)
 
-## 7. Carga de datos — tabla `production_batches`
+### 1.7 Carga de datos — tabla `production_batches`
 
-Se generaron 100 registros de prueba para la tabla `production_batches`, en un archivo CSV separado por `;`, con las columnas `id`, `recipe_id`, `name`, `description`, `status`, `created_at`, `updated_at`. Los valores de `recipe_id` se generaron dentro del rango 1-100, referenciando las recetas ya cargadas en la Sección 5, respetando la Foreign Key hacia `recipes`.
+Se generaron 100 registros de prueba para la tabla `production_batches`, en un archivo CSV separado por `;`, con las columnas `id`, `recipe_id`, `name`, `description`, `status`, `created_at`, `updated_at`. Los valores de `recipe_id` se generaron dentro del rango 1-100, referenciando las recetas ya cargadas en la Sección 1.5, respetando la Foreign Key hacia `recipes`.
 
 **Resultado:** se importaron los 100 registros sin errores. Se usó una distribución de `status` con 85% activo / 15% inactivo, para dar variedad a las consultas de filtrado posteriores.
 
@@ -156,41 +158,41 @@ Se generaron 100 registros de prueba para la tabla `production_batches`, en un a
 
 ![100 registros importados correctamente en production_batches](consultas/07-production_batches-importados.png)
 
-## 8. Carga de datos — tabla `supply_movements`
+### 1.8 Carga de datos — tabla `supply_movements`
 
 Se generaron 100 registros de prueba para la tabla `supply_movements`, en un archivo CSV separado por `;`, con las columnas `id`, `production_batch_id`, `supply_id`, `type`, `date`, `quantity`, `notes`, `status`. `supply_id` se generó siempre dentro del rango 1-100 (obligatorio), mientras que `production_batch_id` se dejó vacío en aproximadamente el 30% de las filas, reflejando su carácter nullable — movimientos sin lote de producción asociado, como compras directas o mermas de bodega.
 
-**Resultado:** se importaron los 100 registros sin errores, verificando que las celdas vacías de `production_batch_id` se interpretaran como `NULL` en el asistente de importación. Los valores de `type` (`IN`, `OUT`, `ADJUSTMENT`) y `status` (`completed`, `pending`, `cancelled`) son texto de flujo de negocio, distinto del `status` booleano usado en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions` (ver nota de la Sección 2).
+**Resultado:** se importaron los 100 registros sin errores, verificando que las celdas vacías de `production_batch_id` se interpretaran como `NULL` en el asistente de importación. Los valores de `type` (`IN`, `OUT`, `ADJUSTMENT`) y `status` (`completed`, `pending`, `cancelled`) son texto de flujo de negocio, distinto del `status` booleano usado en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions` (ver nota de la Sección 1.2).
 
 **Evidencia (imagen):**
 
 ![100 registros importados correctamente en supply_movements](consultas/08-supply_movements-importados.png)
 
-## 9. Carga de datos — tabla `sales`
+### 1.9 Carga de datos — tabla `sales`
 
 Se generaron 100 registros de prueba para la tabla `sales`, en un archivo CSV separado por `;`, con las columnas `id`, `client_id`, `date`, `subtotal`, `taxes`, `total`, `status`. `client_id` se dejó vacío en aproximadamente el 40% de las filas, simulando ventas de mostrador sin cliente registrado — consistente con la ausencia de Foreign Key para esta columna, ya documentada en el modelo original. `taxes` se calculó como el 19% del `subtotal`, y `total` como la suma de ambos, para mantener consistencia numérica entre las tres columnas.
 
-**Resultado:** se importaron los 100 registros sin errores. `status` (`paid`, `pending`, `cancelled`) es texto de flujo de negocio, distinto del `status` booleano usado en otras tablas del modelo (ver nota de la Sección 2).
+**Resultado:** se importaron los 100 registros sin errores. `status` (`paid`, `pending`, `cancelled`) es texto de flujo de negocio, distinto del `status` booleano usado en otras tablas del modelo (ver nota de la Sección 1.2).
 
 **Evidencia (imagen):**
 
 ![100 registros importados correctamente en sales](consultas/09-sales-importados.png)
 
-## 10. Carga de datos — tabla `sale_details`
+### 1.10 Carga de datos — tabla `sale_details`
 
 Se generaron 100 registros de prueba para la tabla `sale_details`, en un archivo CSV separado por `;`, con las columnas `id`, `header_id`, `item_id`, `quantity`, `unit_price`, `total`, `notes`. `header_id` referencia `sales(id)` e `item_id` referencia `products(id)`, ambos en el rango 1-100. `total` se calculó como `quantity × unit_price`, garantizando consistencia interna en cada fila.
 
 **Resultado:** se importaron los 100 registros sin errores.
 
-**Nota:** `header_id` se generó de forma independiente al `subtotal` registrado en `sales` (Sección 9); la suma de `total` por `header_id` no necesariamente coincide con el `subtotal` de la venta correspondiente, al tratarse de dos conjuntos de datos generados por separado para fines de prueba.
+**Nota:** `header_id` se generó de forma independiente al `subtotal` registrado en `sales` (Sección 1.9); la suma de `total` por `header_id` no necesariamente coincide con el `subtotal` de la venta correspondiente, al tratarse de dos conjuntos de datos generados por separado para fines de prueba.
 
 **Evidencia (imagen):**
 
 ![100 registros importados correctamente en sale_details](consultas/10-sale_details-importados.png)
 
-## 11. Carga de datos — tabla `payments`
+### 1.11 Carga de datos — tabla `payments`
 
-Se generaron 100 registros de prueba para la tabla `payments`, en un archivo CSV separado por `;`, con las columnas `id`, `reference_type`, `reference_id`, `method`, `amount`, `date`, `status`. Todos los registros se generaron con `reference_type = 'sale'` y `reference_id` en el rango 1-100, asociando cada pago a una venta de la tabla `sales` (Sección 9) por convención de datos, dado que esta columna es polimórfica y no está resguardada por una Foreign Key.
+Se generaron 100 registros de prueba para la tabla `payments`, en un archivo CSV separado por `;`, con las columnas `id`, `reference_type`, `reference_id`, `method`, `amount`, `date`, `status`. Todos los registros se generaron con `reference_type = 'sale'` y `reference_id` en el rango 1-100, asociando cada pago a una venta de la tabla `sales` (Sección 1.9) por convención de datos, dado que esta columna es polimórfica y no está resguardada por una Foreign Key.
 
 **Resultado:** se importaron los 100 registros sin errores.
 
@@ -198,7 +200,7 @@ Se generaron 100 registros de prueba para la tabla `payments`, en un archivo CSV
 
 ![100 registros importados correctamente en payments](consultas/11-payments-importados.png)
 
-## 12. Carga de datos — tabla `promotions`
+### 1.12 Carga de datos — tabla `promotions`
 
 Se generaron 100 registros de prueba para la tabla `promotions`, en un archivo CSV separado por `;`, con las columnas `id`, `name`, `description`, `status`, `created_at`, `updated_at`. Sin Foreign Key ni tabla puente hacia `products`, respetando la decisión ya documentada para la relación `Promotion N:M Product`.
 
@@ -208,9 +210,9 @@ Se generaron 100 registros de prueba para la tabla `promotions`, en un archivo C
 
 ![100 registros importados correctamente en promotions](consultas/12-promotions-importados.png)
 
-## 1. Consultas avanzadas en MySQL
+### 1.13 Consultas avanzadas en MySQL
 
-### 1.1 Mostrar algunos de los registros de la tabla `products`
+#### 1.13.1 Mostrar algunos de los registros de la tabla `products`
 
 ```sql
 SELECT sku, name, price, status FROM products;
@@ -220,9 +222,9 @@ SELECT sku, name, price, status FROM products;
 
 ![Registros de la tabla products](consultas/mysql-01-1-products.png)
 
-**Resultado:** la consulta devolvió los 100 registros de `products` con sus columnas `sku`, `name`, `price` y `status`, confirmando la carga de datos realizada en la Sección 3.
+**Resultado:** la consulta devolvió los 100 registros de `products` con sus columnas `sku`, `name`, `price` y `status`, confirmando la carga de datos realizada en la Sección 1.3.
 
-### 1.2 Mostrar de forma ordenada (DESC) las ventas desde su comienzo
+#### 1.13.2 Mostrar de forma ordenada (DESC) las ventas desde su comienzo
 
 ```sql
 SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
@@ -232,9 +234,9 @@ SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
 
 ![Ventas ordenadas descendentemente por fecha](consultas/mysql-02-1-sales.png)
 
-**Resultado:** la consulta devolvió los 100 registros de `sales` ordenados de la fecha más reciente (2026-03-27) a la más antigua (2025-06-02), confirmando que `ORDER BY date DESC` funciona correctamente sobre los datos cargados en la Sección 9.
+**Resultado:** la consulta devolvió los 100 registros de `sales` ordenados de la fecha más reciente (2026-03-27) a la más antigua (2025-06-02), confirmando que `ORDER BY date DESC` funciona correctamente sobre los datos cargados en la Sección 1.9.
 
-### 1.3 Consultas a múltiples tablas mediante WHERE
+#### 1.13.3 Consultas a múltiples tablas mediante WHERE
 
 ```sql
 SELECT *
@@ -248,7 +250,7 @@ WHERE S.id = SD.header_id;
 
 **Resultado:** la consulta devolvió los 100 registros de `sale_details` combinados con su venta correspondiente en `sales`, mediante la condición `S.id = SD.header_id` en la cláusula WHERE.
 
-### 1.4 Consultas a múltiples tablas mediante JOIN
+#### 1.13.4 Consultas a múltiples tablas mediante JOIN
 
 ```sql
 SELECT S.date, S.status, SD.*
@@ -260,11 +262,11 @@ JOIN sale_details AS SD ON (S.id = SD.header_id);
 
 ![Join de sales y sale_details mediante JOIN](consultas/mysql-04-1-sales_sale_details_join.png)
 
-**Resultado:** la consulta devolvió los 100 registros combinando `sales` y `sale_details` mediante `JOIN ... ON`, con el mismo resultado que la Sección 1.3 (forma WHERE), confirmando que ambas sintaxis son equivalentes para esta relación.
+**Resultado:** la consulta devolvió los 100 registros combinando `sales` y `sale_details` mediante `JOIN ... ON`, con el mismo resultado que la Sección 1.13.3 (forma WHERE), confirmando que ambas sintaxis son equivalentes para esta relación.
 
-### 1.5 Condiciones en las consultas / filtros
+#### 1.13.5 Condiciones en las consultas / filtros
 
-Para las condiciones se utiliza la cláusula WHERE. Se realiza la misma consulta de la Sección 1.3/1.4, filtrando por un estado específico de `sales.status`.
+Para las condiciones se utiliza la cláusula WHERE. Se realiza la misma consulta de la Sección 1.13.3/1.13.4, filtrando por un estado específico de `sales.status`.
 
 ```sql
 SELECT *
@@ -291,7 +293,7 @@ WHERE S.status = 'cancelled';
 
 **Resultado:** la consulta devolvió 10 registros con `status = 'cancelled'`, usando la forma JOIN en vez de WHERE para la relación entre tablas.
 
-### 1.6 Consultas con filtros condicional LIKE
+#### 1.13.6 Consultas con filtros condicional LIKE
 
 ```sql
 SELECT * FROM products AS P WHERE P.name LIKE 'Pan%';
@@ -315,7 +317,7 @@ SELECT * FROM products AS P WHERE P.description LIKE CONCAT('%','chocolate','%')
 
 **Resultado:** la consulta devolvió 1 registro (`Torta de chocolate Mini clasico`), usando `CONCAT` para construir el patrón `%chocolate%` y localizar la coincidencia dentro de la descripción, sin importar su posición en el texto.
 
-### 1.7 Consultas con filtros condicionales BETWEEN
+#### 1.13.7 Consultas con filtros condicionales BETWEEN
 
 ```sql
 SELECT P.name, P.sku, SD.quantity, SD.total, S.date, PAY.method
@@ -333,7 +335,7 @@ ORDER BY PAY.date ASC;
 
 **Resultado:** la consulta combina `products`, `sale_details`, `sales` y `payments` en una cadena de 4 tablas, filtrando por `PAY.date` dentro del rango especificado. Se observan filas repetidas para una misma venta cuando esta tiene múltiples `sale_details` y múltiples `payments` asociados (por ejemplo, "Pan de leche Mini" y "Pastel de queso Individual" aparecen juntos varias veces): esto es el resultado esperado de un JOIN entre dos relaciones 1:N sobre la misma venta, no una duplicación de datos.
 
-### 1.8 Consultas con agrupamiento GROUP BY
+#### 1.13.8 Consultas con agrupamiento GROUP BY
 
 **Forma 1 (rango de fechas, con AVG):**
 ```sql
@@ -381,9 +383,9 @@ ORDER BY total_paid DESC;
 
 ![Ventas con total pagado mayor o igual a 100000, con HAVING](consultas/mysql-08-3-having.png)
 
-**Resultado:** 47 ventas cumplen la condición `SUM(PAY.amount) >= 100000`, encabezadas por la venta 52 con $942.692,25 en 6 pagos. El conjunto es un subconjunto de la Forma 1 (Sección 1.8), filtrado por el umbral establecido en `HAVING`.
+**Resultado:** 47 ventas cumplen la condición `SUM(PAY.amount) >= 100000`, encabezadas por la venta 52 con $942.692,25 en 6 pagos. El conjunto es un subconjunto de la Forma 1 (Sección 1.13.8), filtrado por el umbral establecido en `HAVING`.
 
-### 1.9 Subconsultas y teoría de conjuntos
+#### 1.13.9 Subconsultas y teoría de conjuntos
 
 Mostrar los productos que no han sido vendidos (sin registro en `sale_details`/`sales`) dentro de un rango de fechas específico.
 
@@ -417,13 +419,11 @@ WHERE S.id IS NULL;
 
 **Resultado:** mismos 35 productos que la Forma 1, confirmando la equivalencia entre ambas formas de expresar la teoría de conjuntos (diferencia entre `products` y los productos presentes en `sale_details`/`sales` dentro del rango).
 
-## 2. Renombramiento de tablas y columnas en PostgreSQL
-
-Siguiendo la misma normativa aplicada en MySQL (Sección 1), se renombraron las tablas y columnas de la base `hornoraiz` en PostgreSQL a plural e inglés.
+## 2. PostgreSQL
 
 ### 2.1 Renombramiento de tablas
 
-A diferencia de MySQL, PostgreSQL no soporta `RENAME TABLE` para múltiples tablas en una sola sentencia; cada tabla requiere su propio `ALTER TABLE ... RENAME TO`.
+Siguiendo la misma normativa aplicada en MySQL (Sección 1.1), se renombraron las tablas de la base `hornoraiz` en PostgreSQL a plural e inglés. A diferencia de MySQL, PostgreSQL no soporta `RENAME TABLE` para múltiples tablas en una sola sentencia; cada tabla requiere su propio `ALTER TABLE ... RENAME TO`.
 
 ```sql
 ALTER TABLE producto RENAME TO products;
@@ -509,9 +509,9 @@ ALTER TABLE promotions RENAME COLUMN is_active TO status;
 
 ![Columnas renombradas — information_schema.columns por tabla](consultas/postgres-02-columnas-renombradas.png)
 
-**Resultado:** se verificaron los nombres finales mediante consulta a `information_schema.columns`. Aplica la misma advertencia documentada para MySQL (Sección 2): `status` no tiene un dominio de valores uniforme entre tablas — es booleano (`0`/`1`, ex `is_active`) en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions`, y texto de flujo de negocio (ex `estado`) en `sales`, `payments` y `supply_movements`.
+**Resultado:** se verificaron los nombres finales mediante consulta a `information_schema.columns`. Aplica la misma advertencia documentada para MySQL (Sección 1.2): `status` no tiene un dominio de valores uniforme entre tablas — es booleano (`0`/`1`, ex `is_active`) en `products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches` y `promotions`, y texto de flujo de negocio (ex `estado`) en `sales`, `payments` y `supply_movements`.
 
-## 3. Carga de datos — tabla `products`
+### 2.3 Carga de datos — tabla `products`
 
 Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, separado por `;`), sin necesidad de regenerarlo.
 
@@ -521,7 +521,7 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `products` sin errores.
 
-## 4. Carga de datos — tabla `supplies`
+### 2.4 Carga de datos — tabla `supplies`
 
 **Evidencia (imagen):**
 
@@ -529,7 +529,7 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `supplies` sin errores.
 
-## 5. Carga de datos — tabla `recipes`
+### 2.5 Carga de datos — tabla `recipes`
 
 **Evidencia (imagen):**
 
@@ -537,7 +537,7 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `recipes` sin errores, respetando la Foreign Key hacia `products`.
 
-## 6. Carga de datos — tabla `recipe_supplies`
+### 2.6 Carga de datos — tabla `recipe_supplies`
 
 **Evidencia (imagen):**
 
@@ -545,7 +545,7 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `recipe_supplies` sin errores, respetando las Foreign Keys hacia `recipes` e `supplies`.
 
-## 7. Carga de datos — tabla `production_batches`
+### 2.7 Carga de datos — tabla `production_batches`
 
 **Evidencia (imagen):**
 
@@ -553,7 +553,7 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `production_batches` sin errores, respetando la Foreign Key hacia `recipes`.
 
-## 8. Carga de datos — tabla `supply_movements`
+### 2.8 Carga de datos — tabla `supply_movements`
 
 **Evidencia (imagen):**
 
@@ -561,7 +561,7 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `supply_movements` sin errores, con `production_batch_id` nullable importado correctamente como `NULL` en las filas vacías del CSV.
 
-## 9. Carga de datos — tabla `sales`
+### 2.9 Carga de datos — tabla `sales`
 
 **Evidencia (imagen):**
 
@@ -569,7 +569,7 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `sales` sin errores.
 
-## 10. Carga de datos — tabla `sale_details`
+### 2.10 Carga de datos — tabla `sale_details`
 
 **Evidencia (imagen):**
 
@@ -577,7 +577,7 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `sale_details` sin errores, respetando las Foreign Keys hacia `sales` y `products`.
 
-## 11. Carga de datos — tabla `payments`
+### 2.11 Carga de datos — tabla `payments`
 
 **Evidencia (imagen):**
 
@@ -585,10 +585,48 @@ Se importó el mismo archivo `products.csv` generado para MySQL (100 registros, 
 
 **Resultado:** se importaron los 100 registros en la tabla `payments` sin errores.
 
-## 12. Carga de datos — tabla `promotions`
+### 2.12 Carga de datos — tabla `promotions`
 
 **Evidencia (imagen):**
 
 ![100 registros importados correctamente en promotions - PostgreSQL](consultas/postgres-13-promotions-importados.png)
 
 **Resultado:** se importaron los 100 registros en la tabla `promotions` sin errores.
+
+### 2.13 Incidente: conversión incorrecta de `status` (boolean) al importar por asistente gráfico
+
+Al importar los 6 archivos CSV correspondientes a tablas con columna `status` de tipo `boolean` (`products`, `supplies`, `recipes`, `recipe_supplies`, `production_batches`, `promotions`) mediante el asistente gráfico de DBeaver (Secciones 2.3 a 2.12), todos los registros quedaron con `status = false`, independientemente del valor `1`/`0` original en el CSV, sin que el asistente reportara ningún error.
+
+**Diagnóstico:**
+
+```sql
+SELECT 'products' t, COUNT(*) FILTER (WHERE status) AS activos, COUNT(*) FILTER (WHERE NOT status) AS inactivos FROM products
+UNION ALL SELECT 'supplies', COUNT(*) FILTER (WHERE status), COUNT(*) FILTER (WHERE NOT status) FROM supplies
+UNION ALL SELECT 'recipes', COUNT(*) FILTER (WHERE status), COUNT(*) FILTER (WHERE NOT status) FROM recipes
+UNION ALL SELECT 'recipe_supplies', COUNT(*) FILTER (WHERE status), COUNT(*) FILTER (WHERE NOT status) FROM recipe_supplies
+UNION ALL SELECT 'production_batches', COUNT(*) FILTER (WHERE status), COUNT(*) FILTER (WHERE NOT status) FROM production_batches
+UNION ALL SELECT 'promotions', COUNT(*) FILTER (WHERE status), COUNT(*) FILTER (WHERE NOT status) FROM promotions;
+```
+
+confirmó `activos = 0` en las 6 tablas, evidenciando que el driver del asistente gráfico no convirtió correctamente los valores de texto `'1'`/`'0'` del CSV al tipo `boolean` nativo de PostgreSQL.
+
+**Solución:** se truncaron las 6 tablas afectadas (y `sale_details`, `supply_movements`, vaciadas en cascada por sus Foreign Keys) y se reimportaron mediante `\copy` desde el cliente `psql`, conectado directamente al contenedor Docker de PostgreSQL (`postgres-server`, puerto `5432`), en vez del asistente gráfico:
+
+```sql
+TRUNCATE TABLE recipe_supplies, production_batches, recipes, supplies, promotions, products RESTART IDENTITY CASCADE;
+```
+
+```\copy products FROM '/home/vboxuser/products.csv' WITH (FORMAT csv, DELIMITER ';', HEADER true)
+\copy supplies FROM '/home/vboxuser/supplies.csv' WITH (FORMAT csv, DELIMITER ';', HEADER true)
+\copy recipes FROM '/home/vboxuser/recipes.csv' WITH (FORMAT csv, DELIMITER ';', HEADER true)
+\copy recipe_supplies FROM '/home/vboxuser/recipe_supplies.csv' WITH (FORMAT csv, DELIMITER ';', HEADER true)
+\copy production_batches FROM '/home/vboxuser/production_batches.csv' WITH (FORMAT csv, DELIMITER ';', HEADER true)
+\copy sale_details FROM '/home/vboxuser/sale_details.csv' WITH (FORMAT csv, DELIMITER ';', HEADER true)
+\copy promotions FROM '/home/vboxuser/promotions.csv' WITH (FORMAT csv, DELIMITER ';', HEADER true)
+```
+
+**Evidencia (imagen):**
+
+![Conteo activos/inactivos tras reimportación con psql](consultas/postgres-14-status-corregido.png)
+
+**Resultado:** tras la reimportación por `\copy`, la conversión de `status` se realizó correctamente, obteniendo proporciones reales de activos/inactivos en las 6 tablas (`products`: 90/10, `supplies`: 89/11, `recipes`: 95/5, `recipe_supplies`: 93/7, `production_batches`: 88/12, `promotions`: 60/40), a diferencia del `0/100` uniforme que arrojó el asistente gráfico.
