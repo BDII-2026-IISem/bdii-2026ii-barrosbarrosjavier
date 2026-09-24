@@ -207,3 +207,17 @@ Se generaron 100 registros de prueba para la tabla `promotions`, en un archivo C
 **Evidencia (imagen):**
 
 ![100 registros importados correctamente en promotions](consultas/12-promotions-importados.png)
+
+## 1. Consultas avanzadas en MySQL
+
+### 1.1 Mostrar algunos de los registros de la tabla `products`
+
+```sql
+SELECT sku, name, price, status FROM products;
+```
+
+**Evidencia (imagen):**
+
+![Registros de la tabla products](consultas/mysql-01-1-products.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `products` con sus columnas `sku`, `name`, `price` y `status`, confirmando la carga de datos realizada en la Sección 3.
