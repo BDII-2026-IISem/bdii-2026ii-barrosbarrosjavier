@@ -1602,3 +1602,21 @@ WHERE S.status = 'cancelled' AND P.name LIKE 'Pan%';
 ![Combinación status cancelled y LIKE Pan - Oracle](consultas/oracle-15-9-combinacion.png)
 
 **Resultado:** la consulta devolvió 4 registros, mismo resultado que en los otros tres motores.
+
+#### 4.15.7 Consultas con filtros condicionales BETWEEN
+
+```sql
+SELECT P.name, P.sku, SD.quantity, SD.total, S."date", PAY.method
+FROM products P
+JOIN sale_details SD ON P.id = SD.item_id
+JOIN sales S ON SD.header_id = S.id
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY."date" BETWEEN TO_DATE('2025-06-01','YYYY-MM-DD') AND TO_DATE('2026-03-30','YYYY-MM-DD')
+ORDER BY PAY."date" ASC;
+```
+
+**Evidencia (imagen):**
+
+![Productos vendidos con pago en rango de fechas - Oracle](consultas/oracle-15-10-between-4tablas.png)
+
+**Resultado:** la consulta combina `products`, `sale_details`, `sales` y `payments` en una cadena de 4 tablas, con el mismo resultado que en MySQL (Sección 1.13.7), PostgreSQL (Sección 2.14.7) y SQL Server (Sección 3.15.7): filas repetidas por venta cuando existen múltiples `sale_details` y múltiples `payments` asociados. Se usó `TO_DATE()` explícito para el rango del `BETWEEN`, ya que Oracle no convierte automáticamente literales de texto a fecha en esta cláusula como sí hacen los otros tres motores.
