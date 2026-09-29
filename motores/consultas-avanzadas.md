@@ -1483,3 +1483,15 @@ UNION ALL SELECT 'PROMOTIONS', COUNT(*), SUM(CASE WHEN status=1 THEN 1 ELSE 0 EN
 ![Conteo total y status verificado en Oracle](consultas/oracle-14-verificacion-carga.png)
 
 **Resultado:** las 10 tablas quedaron con 100 registros exactos. Las proporciones de `status` en las 6 tablas booleanas coinciden con MySQL, PostgreSQL y SQL Server: `products` 90/10, `supplies` 89/11, `recipes` 95/5, `recipe_supplies` 93/7, `production_batches` 88/12, `promotions` 60/40 — sin el incidente de conversión sufrido en PostgreSQL (Sección 2.13), ya que `NUMBER(1)` en Oracle acepta directamente los valores de texto `'1'`/`'0'` del CSV sin ambigüedad de tipo.
+
+#### 4.15.1 Mostrar algunos de los registros de la tabla `products`
+
+```sql
+SELECT sku, name, price, status FROM products;
+```
+
+**Evidencia (imagen):**
+
+![Registros de la tabla products - Oracle](consultas/oracle-15-1-products.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `products`, mismo resultado que en MySQL (Sección 1.13.1), PostgreSQL (Sección 2.14.1) y SQL Server (Sección 3.15.1).
