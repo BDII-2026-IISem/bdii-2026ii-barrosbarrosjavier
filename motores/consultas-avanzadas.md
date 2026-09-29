@@ -1264,3 +1264,93 @@ WHERE S.id IS NULL;
 ![Productos no vendidos - LEFT JOIN con IS NULL - SQL Server](consultas/mssql-15-15-left-join.png)
 
 **Resultado:** mismos 35 productos que la Forma 1, confirmando la equivalencia entre ambas formas de expresar la teoría de conjuntos, consistente con MySQL y PostgreSQL.
+
+## 4. Oracle
+
+### 4.1 Renombramiento de tablas
+
+Siguiendo la misma normativa aplicada en los otros tres motores, se renombraron las tablas de la base `hornoraiz` en Oracle a plural e inglés. Oracle usa `RENAME` directo sobre el nombre de la tabla (sin `TABLE` ni `TO`, a diferencia de PostgreSQL/SQL Server).
+
+```sql
+RENAME producto TO products;
+RENAME insumo TO supplies;
+RENAME receta TO recipes;
+RENAME receta_insumo TO recipe_supplies;
+RENAME lote_produccion TO production_batches;
+RENAME movimiento_insumo TO supply_movements;
+RENAME venta TO sales;
+RENAME venta_detalle TO sale_details;
+RENAME pago TO payments;
+RENAME promocion TO promotions;
+```
+
+**Evidencia (imagen):**
+
+![Tablas renombradas correctamente en Oracle](consultas/oracle-01-tablas-renombradas.png)
+
+**Resultado:** las 10 tablas quedaron renombradas a plural e inglés, sin tabla puente residual (a diferencia de MySQL/PostgreSQL/SQL Server, este esquema de Oracle nunca tuvo `promocion_producto`).
+
+### 4.2 Renombramiento de columnas
+
+```sql
+ALTER TABLE products RENAME COLUMN nombre TO name;
+ALTER TABLE products RENAME COLUMN descripcion TO description;
+ALTER TABLE products RENAME COLUMN precio TO price;
+ALTER TABLE products RENAME COLUMN is_active TO status;
+
+ALTER TABLE supplies RENAME COLUMN codigo TO code;
+ALTER TABLE supplies RENAME COLUMN nombre TO name;
+ALTER TABLE supplies RENAME COLUMN unidad_medida TO unit_of_measure;
+ALTER TABLE supplies RENAME COLUMN stock_minimo TO min_stock;
+ALTER TABLE supplies RENAME COLUMN is_active TO status;
+
+ALTER TABLE recipes RENAME COLUMN producto_id TO product_id;
+ALTER TABLE recipes RENAME COLUMN nombre TO name;
+ALTER TABLE recipes RENAME COLUMN descripcion TO description;
+ALTER TABLE recipes RENAME COLUMN is_active TO status;
+
+ALTER TABLE recipe_supplies RENAME COLUMN principal_id TO main_id;
+ALTER TABLE recipe_supplies RENAME COLUMN relacionado_id TO related_id;
+ALTER TABLE recipe_supplies RENAME COLUMN datos_relacion TO relation_data;
+ALTER TABLE recipe_supplies RENAME COLUMN is_active TO status;
+
+ALTER TABLE production_batches RENAME COLUMN receta_id TO recipe_id;
+ALTER TABLE production_batches RENAME COLUMN nombre TO name;
+ALTER TABLE production_batches RENAME COLUMN descripcion TO description;
+ALTER TABLE production_batches RENAME COLUMN is_active TO status;
+
+ALTER TABLE supply_movements RENAME COLUMN lote_produccion_id TO production_batch_id;
+ALTER TABLE supply_movements RENAME COLUMN insumo_id TO supply_id;
+ALTER TABLE supply_movements RENAME COLUMN tipo TO type;
+ALTER TABLE supply_movements RENAME COLUMN fecha TO "date";
+ALTER TABLE supply_movements RENAME COLUMN cantidad TO quantity;
+ALTER TABLE supply_movements RENAME COLUMN observaciones TO notes;
+ALTER TABLE supply_movements RENAME COLUMN estado TO status;
+
+ALTER TABLE sales RENAME COLUMN cliente_id TO client_id;
+ALTER TABLE sales RENAME COLUMN fecha TO "date";
+ALTER TABLE sales RENAME COLUMN impuestos TO taxes;
+ALTER TABLE sales RENAME COLUMN estado TO status;
+
+ALTER TABLE sale_details RENAME COLUMN cabecera_id TO header_id;
+ALTER TABLE sale_details RENAME COLUMN cantidad TO quantity;
+ALTER TABLE sale_details RENAME COLUMN valor_unitario TO unit_price;
+ALTER TABLE sale_details RENAME COLUMN observaciones TO notes;
+
+ALTER TABLE payments RENAME COLUMN referencia_tipo TO reference_type;
+ALTER TABLE payments RENAME COLUMN referencia_id TO reference_id;
+ALTER TABLE payments RENAME COLUMN metodo TO method;
+ALTER TABLE payments RENAME COLUMN monto TO amount;
+ALTER TABLE payments RENAME COLUMN fecha TO "date";
+ALTER TABLE payments RENAME COLUMN estado TO status;
+
+ALTER TABLE promotions RENAME COLUMN nombre TO name;
+ALTER TABLE promotions RENAME COLUMN descripcion TO description;
+ALTER TABLE promotions RENAME COLUMN is_active TO status;
+```
+
+**Evidencia (imagen):**
+
+![Columnas renombradas — user_tab_columns por tabla](consultas/oracle-02-columnas-renombradas.png)
+
+**Resultado:** se verificaron los nombres finales mediante `user_tab_columns`, confirmando el esquema en inglés idéntico a MySQL, PostgreSQL y SQL Server. Se documenta un incidente específico de Oracle: `DATE` es palabra reservada del motor, por lo que la columna `fecha` en `supply_movements`, `sales` y `payments` no pudo renombrarse a `date` sin comillas dobles (`ORA-00904: identificador no válido`). Se corrigió forzando el identificador como `"date"` (quoted identifier), lo cual implica que toda consulta futura sobre estas 3 tablas debe referenciar esa columna entre comillas dobles en minúscula exacta (`S."date"`, no `S.date`), a diferencia de las demás columnas.
