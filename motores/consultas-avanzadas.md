@@ -1495,3 +1495,15 @@ SELECT sku, name, price, status FROM products;
 ![Registros de la tabla products - Oracle](consultas/oracle-15-1-products.png)
 
 **Resultado:** la consulta devolvió los 100 registros de `products`, mismo resultado que en MySQL (Sección 1.13.1), PostgreSQL (Sección 2.14.1) y SQL Server (Sección 3.15.1).
+
+#### 4.15.2 Mostrar de forma ordenada (DESC) las ventas desde su comienzo
+
+```sql
+SELECT id, "date", subtotal, status FROM sales ORDER BY "date" DESC;
+```
+
+**Evidencia (imagen):**
+
+![Ventas ordenadas descendentemente por fecha - Oracle](consultas/oracle-15-2-sales.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `sales` ordenados de la fecha más reciente a la más antigua, mismo resultado que en MySQL (Sección 1.13.2), PostgreSQL (Sección 2.14.2) y SQL Server (Sección 3.15.2). Se referenció la columna como `"date"` (quoted identifier), necesario por ser `DATE` palabra reservada en Oracle (ver nota de la Sección 4.2).
