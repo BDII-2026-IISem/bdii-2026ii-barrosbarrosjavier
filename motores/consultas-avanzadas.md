@@ -1507,3 +1507,17 @@ SELECT id, "date", subtotal, status FROM sales ORDER BY "date" DESC;
 ![Ventas ordenadas descendentemente por fecha - Oracle](consultas/oracle-15-2-sales.png)
 
 **Resultado:** la consulta devolvió los 100 registros de `sales` ordenados de la fecha más reciente a la más antigua, mismo resultado que en MySQL (Sección 1.13.2), PostgreSQL (Sección 2.14.2) y SQL Server (Sección 3.15.2). Se referenció la columna como `"date"` (quoted identifier), necesario por ser `DATE` palabra reservada en Oracle (ver nota de la Sección 4.2).
+
+#### 4.15.3 Consultas a múltiples tablas mediante WHERE
+
+```sql
+SELECT *
+FROM sale_details SD, sales S
+WHERE S.id = SD.header_id;
+```
+
+**Evidencia (imagen):**
+
+![Join de sale_details y sales mediante WHERE - Oracle](consultas/oracle-15-3-sale_details_sales_where.png)
+
+**Resultado:** la consulta devolvió los 100 registros de `sale_details` combinados con su venta correspondiente en `sales`, mismo resultado que en MySQL (Sección 1.13.3), PostgreSQL (Sección 2.14.3) y SQL Server (Sección 3.15.3).
