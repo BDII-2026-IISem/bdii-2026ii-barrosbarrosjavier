@@ -1620,3 +1620,53 @@ ORDER BY PAY."date" ASC;
 ![Productos vendidos con pago en rango de fechas - Oracle](consultas/oracle-15-10-between-4tablas.png)
 
 **Resultado:** la consulta combina `products`, `sale_details`, `sales` y `payments` en una cadena de 4 tablas, con el mismo resultado que en MySQL (Sección 1.13.7), PostgreSQL (Sección 2.14.7) y SQL Server (Sección 3.15.7): filas repetidas por venta cuando existen múltiples `sale_details` y múltiples `payments` asociados. Se usó `TO_DATE()` explícito para el rango del `BETWEEN`, ya que Oracle no convierte automáticamente literales de texto a fecha en esta cláusula como sí hacen los otros tres motores.
+
+#### 4.15.8 Consultas con agrupamiento GROUP BY
+
+**Forma 1 (rango de fechas, con AVG):**
+```sql
+SELECT S.id, S."date", SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count, AVG(PAY.amount) AS avg_payment
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY."date" BETWEEN TO_DATE('2025-06-01','YYYY-MM-DD') AND TO_DATE('2026-03-30','YYYY-MM-DD')
+GROUP BY S.id, S."date"
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Total pagado por venta con AVG - Oracle](consultas/oracle-15-11-groupby-avg.png)
+
+**Resultado:** 62 ventas agrupadas, mismo resultado que en los otros tres motores, encabezadas por la venta 52 con $942.692,25 en 6 pagos. La columna `avg_payment` muestra alta precisión decimal (ej. `85617.8366666666666666666666666666666667`), comportamiento propio del tipo `NUMBER` de Oracle en operaciones `AVG`, con más decimales que MySQL o SQL Server.
+
+**Forma 2 (filtro por status y method):**
+```sql
+SELECT S.id, S."date", SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.status = 'completed' AND PAY.method = 'card'
+GROUP BY S.id, S."date"
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Total pagado filtrando por status completed y method card - Oracle](consultas/oracle-15-12-groupby-filtro.png)
+
+**Resultado:** 19 ventas, mismo resultado que en los otros tres motores, encabezadas por la venta 52 con $328.898,26 en 2 pagos.
+
+**Con HAVING:**
+```sql
+SELECT S.id, S."date", SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+GROUP BY S.id, S."date"
+HAVING SUM(PAY.amount) >= 100000
+ORDER BY total_paid DESC;
+```
+
+**Evidencia (imagen):**
+
+![Ventas con total pagado mayor o igual a 100000, con HAVING - Oracle](consultas/oracle-15-13-having.png)
+
+**Resultado:** 47 ventas, mismo resultado que en los otros tres motores, encabezadas por la venta 52 con $942.692,25 en 6 pagos.
