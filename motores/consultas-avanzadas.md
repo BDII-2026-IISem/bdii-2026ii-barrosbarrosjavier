@@ -1521,3 +1521,17 @@ WHERE S.id = SD.header_id;
 ![Join de sale_details y sales mediante WHERE - Oracle](consultas/oracle-15-3-sale_details_sales_where.png)
 
 **Resultado:** la consulta devolvió los 100 registros de `sale_details` combinados con su venta correspondiente en `sales`, mismo resultado que en MySQL (Sección 1.13.3), PostgreSQL (Sección 2.14.3) y SQL Server (Sección 3.15.3).
+
+#### 4.15.4 Consultas a múltiples tablas mediante JOIN
+
+```sql
+SELECT S."date", S.status, SD.*
+FROM sales S
+JOIN sale_details SD ON (S.id = SD.header_id);
+```
+
+**Evidencia (imagen):**
+
+![Join de sales y sale_details mediante JOIN - Oracle](consultas/oracle-15-4-sales_sale_details_join.png)
+
+**Resultado:** la consulta devolvió los 100 registros combinando `sales` y `sale_details` mediante `JOIN ... ON`, mismo resultado que en MySQL (Sección 1.13.4), PostgreSQL (Sección 2.14.4) y SQL Server (Sección 3.15.4).
