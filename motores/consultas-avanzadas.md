@@ -1670,3 +1670,37 @@ ORDER BY total_paid DESC;
 ![Ventas con total pagado mayor o igual a 100000, con HAVING - Oracle](consultas/oracle-15-13-having.png)
 
 **Resultado:** 47 ventas, mismo resultado que en los otros tres motores, encabezadas por la venta 52 con $942.692,25 en 6 pagos.
+
+#### 4.15.9 Subconsultas y teoría de conjuntos
+
+Mostrar los productos que no han sido vendidos (sin registro en `sale_details`/`sales`) dentro de un rango de fechas específico.
+
+**Forma 1 (subconsulta con NOT IN):**
+```sql
+SELECT * FROM products P
+WHERE P.id NOT IN (
+  SELECT SD.item_id FROM sale_details SD
+  JOIN sales S ON SD.header_id = S.id
+  WHERE S."date" BETWEEN TO_DATE('2025-06-01','YYYY-MM-DD') AND TO_DATE('2026-03-30','YYYY-MM-DD')
+);
+```
+
+**Evidencia (imagen):**
+
+![Productos no vendidos - subconsulta NOT IN - Oracle](consultas/oracle-15-14-not-in.png)
+
+**Resultado:** 35 productos sin ventas registradas en el rango de fechas indicado, mismo resultado que en MySQL (Sección 1.13.9), PostgreSQL (Sección 2.14.9) y SQL Server (Sección 3.15.9).
+
+**Forma 2 (LEFT JOIN con IS NULL):**
+```sql
+SELECT * FROM products P
+LEFT JOIN sale_details SD ON (P.id = SD.item_id)
+LEFT JOIN sales S ON (SD.header_id = S.id AND S."date" BETWEEN TO_DATE('2025-06-01','YYYY-MM-DD') AND TO_DATE('2026-03-30','YYYY-MM-DD'))
+WHERE S.id IS NULL;
+```
+
+**Evidencia (imagen):**
+
+![Productos no vendidos - LEFT JOIN con IS NULL - Oracle](consultas/oracle-15-15-left-join.png)
+
+**Resultado:** mismos 35 productos que la Forma 1, confirmando la equivalencia entre ambas formas de expresar la teoría de conjuntos, consistente con los otros tres motores.
