@@ -2103,3 +2103,463 @@ UPDATE sales_audit SET action = 'X' WHERE id = 1;
 **Resultado:** los mensajes fueron `products_audit es inmutable: UPDATE prohibido.`, `products_audit es inmutable: DELETE prohibido.`, `INSERT en products_audit solo permitido desde triggers de products.` y `sales_audit es inmutable: UPDATE prohibido.`. Al final, `products` y `sales` quedaron con 100 filas cada una, igual que antes de las pruebas.
 
 **Limitación.** La sentencia `TRUNCATE TABLE` no dispara triggers en MySQL, así que no queda cubierta por esta protección. Para cerrar ese hueco habría que quitarles el privilegio `DROP`/`TRUNCATE` sobre las tablas de auditoría a los usuarios que no sean administradores.
+
+### 2.15 Procedimientos almacenados
+
+Las 15 consultas de la sección 2.14 se llevaron a procedimientos almacenados con el nombre `sp_consulta_<número>`, igual que en MySQL.
+
+**Diferencia con MySQL.** En PostgreSQL un `PROCEDURE` no devuelve filas por sí solo: la forma de devolver un resultado, `RETURN QUERY`, es propia de las funciones. Como la actividad pide procedimientos y no funciones, cada procedimiento recibe un parámetro `INOUT c refcursor`, abre un cursor con la consulta y lo deja disponible. El resultado se lee con `FETCH ALL FROM c` dentro de la misma transacción:
+
+```sql
+BEGIN; CALL sp_consulta_1_1('c'); FETCH ALL FROM c; COMMIT;
+```
+
+Se descartó `FUNCTION ... RETURNS TABLE` porque exige declarar cada columna de salida, y varias consultas son `SELECT *` sobre dos o tres tablas, con columnas repetidas (`id`, `total`, `status`). Con el cursor esas consultas se conservan tal cual.
+
+Los 15 procedimientos se crearon uno por uno y quedaron registrados en el catálogo del sistema:
+
+```sql
+SELECT proname FROM pg_proc WHERE proname LIKE 'sp_consulta%' ORDER BY 1;
+```
+
+![Los 15 procedimientos en pg_proc](consultas/postgres-sp-creacion.png)
+
+#### 2.15.1 Mostrar algunos de los registros de `products`
+
+**Narrativa:** es el punto de partida para comprobar que el catálogo se cargó completo. Proyecta solo `sku`, `name`, `price` y `status`, en vez de traer la tabla entera. En PostgreSQL `status` es un `boolean` nativo, así que se ve como `true` o `false`.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_1(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT sku, name, price, status FROM products;
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_1](consultas/postgres-sp-1-1-create.png)
+
+![Ejecución de sp_consulta_1_1](consultas/postgres-sp-1-1-call.png)
+
+**Resultado:** devolvió 100 productos: 90 con `status = true` y 10 con `false`, las mismas proporciones de los otros motores. `CIA-859` aparece a $7.950.
+
+#### 2.15.2 Ventas ordenadas de la más reciente a la más antigua
+
+**Narrativa:** responde "¿qué se vendió últimamente?". Usa `ORDER BY date DESC` sobre `sales`, de modo que la primera fila sea la venta más nueva.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_2(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_2](consultas/postgres-sp-1-2-create.png)
+
+![Ejecución de sp_consulta_1_2](consultas/postgres-sp-1-2-call.png)
+
+**Resultado:** devolvió las 100 ventas, de la venta 10 (27 de marzo de 2026, pendiente) a la venta 45 (2 de junio de 2025). El orden es el mismo que en MySQL. Aquí la fecha se muestra como `timestamp` con milisegundos (`.000`).
+
+#### 2.15.3 Ventas con sus líneas de detalle, relación en `WHERE`
+
+**Narrativa:** relaciona cada línea de `sale_details` con su venta mediante `S.id = SD.header_id` en el `WHERE`. Muestra qué productos y cantidades componen cada venta.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_3(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT * FROM sale_details SD, sales S WHERE S.id = SD.header_id;
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_3](consultas/postgres-sp-1-3-create.png)
+
+![Ejecución de sp_consulta_1_3](consultas/postgres-sp-1-3-call.png)
+
+**Resultado:** 100 filas, una por línea de detalle, con las columnas de `sale_details` y de `sales` juntas (`id`, `total` y `status` aparecen dos veces, una por tabla). Ninguna línea quedó sin venta.
+
+#### 2.15.4 Ventas con sus líneas de detalle, relación con `JOIN`
+
+**Narrativa:** la misma pregunta que la 2.15.3, resuelta con `JOIN ... ON`. Proyecta de `sales` solo la fecha y el estado, y de `sale_details` todas las columnas.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_4(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT S.date, S.status, SD.* FROM sales AS S JOIN sale_details AS SD ON (S.id = SD.header_id);
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_4](consultas/postgres-sp-1-4-create.png)
+
+![Ejecución de sp_consulta_1_4](consultas/postgres-sp-1-4-call.png)
+
+**Resultado:** las mismas 100 filas que el procedimiento anterior, lo que confirma que ambas sintaxis son equivalentes.
+
+#### 2.15.5 Filtro por estado de la venta
+
+**Narrativa:** reparte las líneas de detalle según el estado de su venta. El estado se filtra en `sales`, porque `sale_details` no tiene columna `status`. La primera usa la relación en `WHERE` y mide las ventas pagadas. La segunda usa `JOIN` y aísla las canceladas.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_5a(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT * FROM sale_details SD, sales S WHERE S.id = SD.header_id AND S.status = 'paid';
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_5a](consultas/postgres-sp-1-5a-create.png)
+
+![Ejecución de sp_consulta_1_5a](consultas/postgres-sp-1-5a-call.png)
+
+**Resultado:** 86 de las 100 líneas (86 %) pertenecen a ventas pagadas.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_5b(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT S.date, S.status, SD.* FROM sales AS S JOIN sale_details AS SD ON (S.id = SD.header_id) WHERE S.status = 'cancelled';
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_5b](consultas/postgres-sp-1-5b-create.png)
+
+![Ejecución de sp_consulta_1_5b](consultas/postgres-sp-1-5b-call.png)
+
+**Resultado:** 10 líneas, que corresponden a 4 ventas canceladas (39, 40, 48 y 72). Las 4 líneas restantes pertenecen a ventas pendientes.
+
+#### 2.15.6 Filtros con `LIKE`
+
+**Narrativa:** tres búsquedas por patrón de texto. La primera lista los productos cuyo nombre empieza por "Pan". La segunda busca la palabra "chocolate" en cualquier posición de la descripción, con el patrón armado por `CONCAT`. La tercera combina el texto con el estado de la venta, para ver qué productos "Pan" se cancelaron. En PostgreSQL `LIKE` distingue mayúsculas de minúsculas, y los nombres del catálogo empiezan siempre en mayúscula, por lo que el patrón `'Pan%'` es suficiente.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_6a(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT * FROM products AS P WHERE P.name LIKE 'Pan%';
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_6a](consultas/postgres-sp-1-6a-create.png)
+
+![Ejecución de sp_consulta_1_6a](consultas/postgres-sp-1-6a-call.png)
+
+**Resultado:** 29 productos. El patrón incluye también Panettone y Panque, porque solo exige que el nombre comience por "Pan". Dos están inactivos: `PAN-600` y `PANDE-936`.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_6b(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT * FROM products AS P WHERE P.description LIKE CONCAT('%','chocolate','%');
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_6b](consultas/postgres-sp-1-6b-create.png)
+
+![Ejecución de sp_consulta_1_6b](consultas/postgres-sp-1-6b-call.png)
+
+**Resultado:** un solo producto, `Torta de chocolate Mini clasico` (`TORDE-533`, $24.150), que además está inactivo.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_6c(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT S.date, S.status, P.name
+    FROM sales AS S
+    JOIN sale_details AS SD ON (S.id = SD.header_id)
+    JOIN products AS P ON (P.id = SD.item_id)
+    WHERE S.status = 'cancelled' AND P.name LIKE 'Pan%';
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_6c](consultas/postgres-sp-1-6c-create.png)
+
+![Ejecución de sp_consulta_1_6c](consultas/postgres-sp-1-6c-call.png)
+
+**Resultado:** 4 filas: `Pan de yema Individual gourmet`, dos de `Pan de queso Mediano` y `Pan multigrano Grande`. De las 10 líneas canceladas, 4 son panes.
+
+#### 2.15.7 Filtro con `BETWEEN` sobre cuatro tablas
+
+**Narrativa:** responde "¿qué productos se vendieron y cómo se pagaron entre el 1 de junio de 2025 y el 30 de marzo de 2026?". Encadena `products`, `sale_details`, `sales` y `payments`. Como `payments.reference_id` apunta a la venta, la unión exige también `reference_type = 'sale'`. `BETWEEN` acota la fecha del pago.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_7(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT P.name, P.sku, SD.quantity, SD.total, S.date, PAY.method
+    FROM products P
+    JOIN sale_details SD ON P.id = SD.item_id
+    JOIN sales S ON SD.header_id = S.id
+    JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+    WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+    ORDER BY PAY.date ASC;
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_7](consultas/postgres-sp-1-7-create.png)
+
+![Ejecución de sp_consulta_1_7](consultas/postgres-sp-1-7-call.png)
+
+**Resultado:** 97 filas. Una misma línea de venta se repite cuando la venta tiene varios pagos, por ejemplo el `Pan de leche Mini` pagado en efectivo y con tarjeta. Es el resultado esperado de unir dos relaciones 1:N sobre la misma venta.
+
+#### 2.15.8 Agrupamiento con `GROUP BY` y `HAVING`
+
+**Narrativa:** tres resúmenes de pagos por venta con `SUM`, `COUNT` y `AVG`. Responden cuánto se pagó por cada venta, cuántos pagos fueron y cuál fue el promedio. Las dos primeras acotan las filas con `WHERE` antes de agrupar: la primera por rango de fechas y la segunda por estado y método de pago. La tercera filtra con `HAVING` después de agrupar, porque la condición depende de la suma ya calculada.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_8a(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count, AVG(PAY.amount) AS avg_payment
+    FROM sales S
+    JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+    WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+    GROUP BY S.id, S.date
+    ORDER BY total_paid DESC;
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_8a](consultas/postgres-sp-1-8a-create.png)
+
+![Ejecución de sp_consulta_1_8a](consultas/postgres-sp-1-8a-call.png)
+
+**Resultado:** 65 ventas con pagos en el rango. La venta 52 encabeza con $942.692,25 en 6 pagos. La columna `avg_payment` muestra más decimales que en MySQL, porque `AVG` sobre `NUMERIC` en PostgreSQL conserva la precisión completa.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_8b(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+    FROM sales S
+    JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+    WHERE PAY.status = 'completed' AND PAY.method = 'card'
+    GROUP BY S.id, S.date
+    ORDER BY total_paid DESC;
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_8b](consultas/postgres-sp-1-8b-create.png)
+
+![Ejecución de sp_consulta_1_8b](consultas/postgres-sp-1-8b-call.png)
+
+**Resultado:** 19 ventas tienen pagos con tarjeta ya completados. La venta 52 vuelve a encabezar, con $328.898,26 en 2 pagos.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_8c(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+    FROM sales S
+    JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+    GROUP BY S.id, S.date
+    HAVING SUM(PAY.amount) >= 100000
+    ORDER BY total_paid DESC;
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_8c](consultas/postgres-sp-1-8c-create.png)
+
+![Ejecución de sp_consulta_1_8c](consultas/postgres-sp-1-8c-call.png)
+
+**Resultado:** 48 ventas acumulan $100.000 o más en pagos, y la venta 52 vuelve a ser la mayor, con $942.692,25. Esta consulta no lleva filtro de fechas, así que considera todos los pagos registrados.
+
+#### 2.15.9 Subconsultas y teoría de conjuntos
+
+**Narrativa:** responde "¿qué productos no se vendieron entre el 1 de junio de 2025 y el 30 de marzo de 2026?". Es una diferencia de conjuntos: todos los productos menos los que aparecen en alguna línea de venta del rango. La primera forma usa `NOT IN` con una subconsulta. La segunda usa `LEFT JOIN` con `WHERE S.id IS NULL`.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_9a(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT * FROM products AS P
+    WHERE P.id NOT IN (
+      SELECT SD.item_id FROM sale_details SD
+      JOIN sales S ON SD.header_id = S.id
+      WHERE S.date BETWEEN '2025-06-01' AND '2026-03-30');
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_9a](consultas/postgres-sp-1-9a-create.png)
+
+![Ejecución de sp_consulta_1_9a](consultas/postgres-sp-1-9a-call.png)
+
+**Resultado:** 36 de los 100 productos no tuvieron ventas en el rango, y los otros 64 sí se vendieron al menos una vez.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_9b(INOUT c refcursor) LANGUAGE plpgsql AS $$
+BEGIN
+  OPEN c FOR SELECT * FROM products AS P
+    LEFT JOIN sale_details AS SD ON (P.id = SD.item_id)
+    LEFT JOIN sales AS S ON (SD.header_id = S.id AND S.date BETWEEN '2025-06-01' AND '2026-03-30')
+    WHERE S.id IS NULL;
+END;
+$$;
+```
+
+![Creación de sp_consulta_1_9b](consultas/postgres-sp-1-9b-create.png)
+
+![Ejecución de sp_consulta_1_9b](consultas/postgres-sp-1-9b-call.png)
+
+**Resultado:** los mismos 36 productos que la forma con `NOT IN`, lo que confirma que ambas expresiones de la diferencia de conjuntos son equivalentes.
+
+### 2.16 Triggers de auditoría
+
+Se crearon las tablas `products_audit` y `sales_audit`, que registran automáticamente cada inserción, actualización o eliminación sobre `products` y `sales`. Se eligieron estas dos tablas porque sus cambios pesan más en el negocio: el precio de un producto y el estado de una venta. Cada fila de auditoría guarda el estado anterior (`old_data`) y el posterior (`new_data`) en formato `JSONB`, con la fecha del cambio.
+
+Cada tabla de auditoría tiene tres protecciones: un trigger de registro sobre la tabla original, uno que bloquea cualquier `UPDATE` o `DELETE` sobre la tabla de auditoría y uno que rechaza un `INSERT` directo que no venga del trigger de registro.
+
+**Diferencias con MySQL.**
+
+- En PostgreSQL un trigger ejecuta una función, así que hay una función por tabla (`fn_audit_products` y `fn_audit_sales`) que sirve para los tres eventos. La variable `TG_OP` indica si fue `INSERT`, `UPDATE` o `DELETE`.
+- `to_jsonb(NEW)` y `to_jsonb(OLD)` serializan la fila completa, sin listar columna por columna como en MySQL. Si la tabla gana una columna, la auditoría la incluye sola.
+- Las dos funciones de protección (`fn_audit_block` y `fn_audit_guard`) las comparten ambas tablas de auditoría.
+- La marca que autoriza el `INSERT` es una configuración de la transacción (`set_config('audit.from_trigger', '1', true)`), y no una variable de sesión como en MySQL. Se activa antes de insertar en la auditoría y se limpia después, así que no queda activa si la transacción termina.
+- Un solo trigger cubre `UPDATE OR DELETE` sobre cada tabla de auditoría, con el mismo código de error (`45000`).
+
+```sql
+CREATE TABLE IF NOT EXISTS products_audit (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  product_id INT NOT NULL,
+  action VARCHAR(10) NOT NULL,
+  old_data JSONB,
+  new_data JSONB,
+  changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sales_audit (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  sale_id INT NOT NULL,
+  action VARCHAR(10) NOT NULL,
+  old_data JSONB,
+  new_data JSONB,
+  changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE FUNCTION fn_audit_products() RETURNS trigger AS $$
+BEGIN
+  PERFORM set_config('audit.from_trigger', '1', true);
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO products_audit(product_id, action, old_data, new_data) VALUES (NEW.id, 'INSERT', NULL, to_jsonb(NEW));
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO products_audit(product_id, action, old_data, new_data) VALUES (NEW.id, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW));
+  ELSE
+    INSERT INTO products_audit(product_id, action, old_data, new_data) VALUES (OLD.id, 'DELETE', to_jsonb(OLD), NULL);
+  END IF;
+  PERFORM set_config('audit.from_trigger', '', true);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_audit_sales() RETURNS trigger AS $$
+BEGIN
+  PERFORM set_config('audit.from_trigger', '1', true);
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO sales_audit(sale_id, action, old_data, new_data) VALUES (NEW.id, 'INSERT', NULL, to_jsonb(NEW));
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO sales_audit(sale_id, action, old_data, new_data) VALUES (NEW.id, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW));
+  ELSE
+    INSERT INTO sales_audit(sale_id, action, old_data, new_data) VALUES (OLD.id, 'DELETE', to_jsonb(OLD), NULL);
+  END IF;
+  PERFORM set_config('audit.from_trigger', '', true);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_audit_block() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION '% es inmutable: % prohibido.', TG_TABLE_NAME, TG_OP USING ERRCODE = '45000';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION fn_audit_guard() RETURNS trigger AS $$
+BEGIN
+  IF COALESCE(current_setting('audit.from_trigger', true), '') <> '1' THEN
+    RAISE EXCEPTION 'INSERT en % solo permitido desde los triggers de la tabla original.', TG_TABLE_NAME USING ERRCODE = '45000';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_products_audit ON products;
+CREATE TRIGGER trg_products_audit AFTER INSERT OR UPDATE OR DELETE ON products
+FOR EACH ROW EXECUTE FUNCTION fn_audit_products();
+
+DROP TRIGGER IF EXISTS trg_sales_audit ON sales;
+CREATE TRIGGER trg_sales_audit AFTER INSERT OR UPDATE OR DELETE ON sales
+FOR EACH ROW EXECUTE FUNCTION fn_audit_sales();
+
+DROP TRIGGER IF EXISTS trg_products_audit_block ON products_audit;
+CREATE TRIGGER trg_products_audit_block BEFORE UPDATE OR DELETE ON products_audit
+FOR EACH ROW EXECUTE FUNCTION fn_audit_block();
+
+DROP TRIGGER IF EXISTS trg_products_audit_guard ON products_audit;
+CREATE TRIGGER trg_products_audit_guard BEFORE INSERT ON products_audit
+FOR EACH ROW EXECUTE FUNCTION fn_audit_guard();
+
+DROP TRIGGER IF EXISTS trg_sales_audit_block ON sales_audit;
+CREATE TRIGGER trg_sales_audit_block BEFORE UPDATE OR DELETE ON sales_audit
+FOR EACH ROW EXECUTE FUNCTION fn_audit_block();
+
+DROP TRIGGER IF EXISTS trg_sales_audit_guard ON sales_audit;
+CREATE TRIGGER trg_sales_audit_guard BEFORE INSERT ON sales_audit
+FOR EACH ROW EXECUTE FUNCTION fn_audit_guard();
+```
+
+**Verificación.** `pg_trigger` también lista tres triggers del modelo original (`trg_receta_updated_at`, `trg_lote_produccion_updated_at` y `trg_promocion_updated_at`), que mantienen la columna `updated_at`. Por eso la consulta filtra los de auditoría por nombre y deben salir seis:
+
+```sql
+SELECT tgname, tgrelid::regclass AS tabla FROM pg_trigger WHERE NOT tgisinternal AND tgname LIKE '%audit%' ORDER BY 2,1;
+```
+
+![Los 6 triggers de auditoría](consultas/postgres-trg-01-lista.png)
+
+#### Prueba de `products_audit`
+
+Los datos se cargaron con ids propios (1 a 100), por lo que las pruebas usan un `id` explícito (9001) en vez de depender de la secuencia. Se insertó un producto de prueba, se le cambió el precio y se borró.
+
+```sql
+INSERT INTO products (id, sku, name, description, price, status) VALUES (9001,'TEST-001','Producto de prueba','Prueba de auditoria',1000.00,true);
+UPDATE products SET price = 1500.00 WHERE id = 9001;
+DELETE FROM products WHERE id = 9001;
+SELECT id, product_id, action, old_data, new_data FROM products_audit ORDER BY id DESC LIMIT 3;
+```
+
+![Registros de products_audit](consultas/postgres-trg-03-products-audit.png)
+
+**Resultado:** se registraron las tres operaciones sobre el producto 9001: el `INSERT` con precio 1000, el `UPDATE` con `old_data` en 1000 y `new_data` en 1500, y el `DELETE` con el estado final (precio 1500). Cada registro guarda la fila completa en `JSONB`, con todas las columnas del producto.
+
+#### Prueba de `sales_audit`
+
+```sql
+INSERT INTO sales (id, client_id, date, subtotal, taxes, total, status) VALUES (9001, NULL, NOW(), 1000, 190, 1190, 'pending');
+UPDATE sales SET status = 'paid' WHERE id = 9001;
+DELETE FROM sales WHERE id = 9001;
+SELECT id, sale_id, action, old_data, new_data FROM sales_audit ORDER BY id DESC LIMIT 3;
+```
+
+![Registros de sales_audit](consultas/postgres-trg-04-sales-audit.png)
+
+**Resultado:** para la venta 9001 quedaron el `INSERT` en `pending`, el `UPDATE` de `pending` a `paid` y el `DELETE` con el último estado. La auditoría capta el cambio de estado de la venta, que es el dato que más interesa.
+
+#### Pruebas de inmutabilidad
+
+Con las tablas de auditoría ya con filas, se intentó alterarlas. Las cuatro operaciones fueron rechazadas por los triggers de protección:
+
+```sql
+UPDATE products_audit SET action = 'X' WHERE id = 1;
+DELETE FROM products_audit WHERE id = 1;
+INSERT INTO products_audit (product_id, action, old_data, new_data) VALUES (999,'INSERT',NULL,NULL);
+UPDATE sales_audit SET action = 'X' WHERE id = 1;
+```
+
+![UPDATE sobre products_audit rechazado](consultas/postgres-trg-05-update-products.png)
+
+![DELETE sobre products_audit rechazado](consultas/postgres-trg-06-delete-products.png)
+
+![INSERT directo sobre products_audit rechazado](consultas/postgres-trg-07-insert-products.png)
+
+![UPDATE sobre sales_audit rechazado](consultas/postgres-trg-08-update-sales.png)
+
+**Resultado:** los mensajes fueron `products_audit es inmutable: UPDATE prohibido.`, `products_audit es inmutable: DELETE prohibido.`, `INSERT en products_audit solo permitido desde los triggers de la tabla original.` y `sales_audit es inmutable: UPDATE prohibido.`. Las pruebas de bloqueo se hicieron después de las de registro, porque el trigger actúa por fila: con la tabla de auditoría vacía, un `UPDATE` o `DELETE` no encuentra nada que bloquear. Al final, `products` y `sales` quedaron con 100 filas cada una.
+
+**Limitación.** La sentencia `TRUNCATE` no dispara triggers `FOR EACH ROW`, así que no queda cubierta por esta protección. Para cerrar ese hueco habría que quitarles el privilegio `TRUNCATE` sobre las tablas de auditoría a los usuarios que no sean administradores.
