@@ -2563,3 +2563,493 @@ UPDATE sales_audit SET action = 'X' WHERE id = 1;
 **Resultado:** los mensajes fueron `products_audit es inmutable: UPDATE prohibido.`, `products_audit es inmutable: DELETE prohibido.`, `INSERT en products_audit solo permitido desde los triggers de la tabla original.` y `sales_audit es inmutable: UPDATE prohibido.`. Las pruebas de bloqueo se hicieron después de las de registro, porque el trigger actúa por fila: con la tabla de auditoría vacía, un `UPDATE` o `DELETE` no encuentra nada que bloquear. Al final, `products` y `sales` quedaron con 100 filas cada una.
 
 **Limitación.** La sentencia `TRUNCATE` no dispara triggers `FOR EACH ROW`, así que no queda cubierta por esta protección. Para cerrar ese hueco habría que quitarles el privilegio `TRUNCATE` sobre las tablas de auditoría a los usuarios que no sean administradores.
+
+### 3.16 Procedimientos almacenados
+
+Las 15 consultas de la sección 3.15 se llevaron a procedimientos almacenados con el nombre `sp_consulta_<número>`, igual que en MySQL y PostgreSQL.
+
+**Diferencias con los otros motores.** En SQL Server un procedimiento devuelve directamente el resultado de su `SELECT`, sin cursor como en PostgreSQL. Se crea con `CREATE OR ALTER PROCEDURE ... AS` y se ejecuta con `EXEC`, no con `CALL`. Como cada consulta es una sola sentencia, no necesita bloque `BEGIN ... END`. El estado de los catálogos es un `BIT`, que se muestra como `1` o `0`.
+
+**Creación.** Los 15 procedimientos se crearon primero en lote desde la terminal de la VPS con `sqlcmd`, el cliente de línea de comandos de SQL Server, que entiende `GO`, el separador de lotes. Después se ejecutó cada `CREATE OR ALTER PROCEDURE` uno por uno desde DBeaver para documentar su creación; la sentencia se puede repetir sin efecto. En DBeaver se ejecuta sin la línea `GO`, porque es una palabra del cliente y no de SQL Server, y cada `CREATE OR ALTER PROCEDURE` debe ser la primera sentencia de su lote. Como cada consulta es una sola sentencia, sin bloque `BEGIN ... END`, el editor no la parte por dentro. Esa limitación sí apareció con los triggers (error `102`, sección 3.17).
+
+```bash
+docker exec -i mssql-server /opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P '****' -C -d hornoraiz < ~/sqlserver-procedures.sql
+```
+
+![Ejecución del archivo sqlserver-procedures.sql en la terminal de la VPS](consultas/mssql-sp-terminal.png)
+
+La ejecución no devolvió errores. Desde DBeaver se comprobó que quedaron registrados los 15:
+
+```sql
+SELECT name FROM sys.procedures WHERE name LIKE 'sp_consulta%' ORDER BY name;
+```
+
+![Los 15 procedimientos en sys.procedures](consultas/mssql-sp-creacion.png)
+
+#### 3.16.1 Mostrar algunos de los registros de `products`
+
+**Narrativa:** es el punto de partida para comprobar que el catálogo se cargó completo. Proyecta solo `sku`, `name`, `price` y `status`, en vez de traer la tabla entera.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_1 AS
+SELECT sku, name, price, status FROM products;
+```
+
+![Creación de sp_consulta_1_1](consultas/mssql-sp-1-1-create.png)
+
+```sql
+EXEC sp_consulta_1_1;
+```
+
+![Ejecución de sp_consulta_1_1](consultas/mssql-sp-1-1-call.png)
+
+**Resultado:** devolvió 100 productos: 90 con `status = 1` y 10 con `0`, las mismas proporciones de los otros motores. `CIA-859` aparece a $7.950.
+
+#### 3.16.2 Ventas ordenadas de la más reciente a la más antigua
+
+**Narrativa:** responde "¿qué se vendió últimamente?". Usa `ORDER BY date DESC` sobre `sales`, de modo que la primera fila sea la venta más nueva.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_2 AS
+SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
+```
+
+![Creación de sp_consulta_1_2](consultas/mssql-sp-1-2-create.png)
+
+```sql
+EXEC sp_consulta_1_2;
+```
+
+![Ejecución de sp_consulta_1_2](consultas/mssql-sp-1-2-call.png)
+
+**Resultado:** devolvió las 100 ventas, de la venta 10 (27 de marzo de 2026, pendiente) a la venta 45 (2 de junio de 2025), en el mismo orden que en los otros motores.
+
+#### 3.16.3 Ventas con sus líneas de detalle, relación en `WHERE`
+
+**Narrativa:** relaciona cada línea de `sale_details` con su venta mediante `S.id = SD.header_id` en el `WHERE`. Muestra qué productos y cantidades componen cada venta.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_3 AS
+SELECT * FROM sale_details SD, sales S WHERE S.id = SD.header_id;
+```
+
+![Creación de sp_consulta_1_3](consultas/mssql-sp-1-3-create.png)
+
+```sql
+EXEC sp_consulta_1_3;
+```
+
+![Ejecución de sp_consulta_1_3](consultas/mssql-sp-1-3-call.png)
+
+**Resultado:** 100 filas, una por línea de detalle, con las columnas de `sale_details` y de `sales` juntas. Ninguna línea quedó sin venta.
+
+#### 3.16.4 Ventas con sus líneas de detalle, relación con `JOIN`
+
+**Narrativa:** la misma pregunta que la 3.16.3, resuelta con `JOIN ... ON`. Proyecta de `sales` solo la fecha y el estado, y de `sale_details` todas las columnas.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_4 AS
+SELECT S.date, S.status, SD.*
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id);
+```
+
+![Creación de sp_consulta_1_4](consultas/mssql-sp-1-4-create.png)
+
+```sql
+EXEC sp_consulta_1_4;
+```
+
+![Ejecución de sp_consulta_1_4](consultas/mssql-sp-1-4-call.png)
+
+**Resultado:** las mismas 100 filas que el procedimiento anterior, lo que confirma que ambas sintaxis son equivalentes.
+
+#### 3.16.5 Filtro por estado de la venta
+
+**Narrativa:** reparte las líneas de detalle según el estado de su venta. El estado se filtra en `sales`, porque `sale_details` no tiene columna `status`. La primera usa la relación en `WHERE` y mide las ventas pagadas. La segunda usa `JOIN` y aísla las canceladas.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_5a AS
+SELECT * FROM sale_details SD, sales S
+WHERE S.id = SD.header_id AND S.status = 'paid';
+```
+
+![Creación de sp_consulta_1_5a](consultas/mssql-sp-1-5a-create.png)
+
+```sql
+EXEC sp_consulta_1_5a;
+```
+
+![Ejecución de sp_consulta_1_5a](consultas/mssql-sp-1-5a-call.png)
+
+**Resultado:** 86 de las 100 líneas (86 %) pertenecen a ventas pagadas.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_5b AS
+SELECT S.date, S.status, SD.*
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id)
+WHERE S.status = 'cancelled';
+```
+
+![Creación de sp_consulta_1_5b](consultas/mssql-sp-1-5b-create.png)
+
+```sql
+EXEC sp_consulta_1_5b;
+```
+
+![Ejecución de sp_consulta_1_5b](consultas/mssql-sp-1-5b-call.png)
+
+**Resultado:** 10 líneas, que corresponden a 4 ventas canceladas (39, 40, 48 y 72). Las 4 líneas restantes pertenecen a ventas pendientes.
+
+#### 3.16.6 Filtros con `LIKE`
+
+**Narrativa:** tres búsquedas por patrón de texto. La primera lista los productos cuyo nombre empieza por "Pan". La segunda busca la palabra "chocolate" en cualquier posición de la descripción, con el patrón armado por `CONCAT`. La tercera combina el texto con el estado de la venta, para ver qué productos "Pan" se cancelaron. En SQL Server, con la intercalación por defecto, `LIKE` no distingue mayúsculas de minúsculas, así que el patrón `'Pan%'` también encontraría "pan".
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_6a AS
+SELECT * FROM products AS P WHERE P.name LIKE 'Pan%';
+```
+
+![Creación de sp_consulta_1_6a](consultas/mssql-sp-1-6a-create.png)
+
+```sql
+EXEC sp_consulta_1_6a;
+```
+
+![Ejecución de sp_consulta_1_6a](consultas/mssql-sp-1-6a-call.png)
+
+**Resultado:** 29 productos. El patrón incluye también Panettone y Panque, porque solo exige que el nombre comience por "Pan". Dos están inactivos: `PAN-600` y `PANDE-936`.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_6b AS
+SELECT * FROM products AS P WHERE P.description LIKE CONCAT('%','chocolate','%');
+```
+
+![Creación de sp_consulta_1_6b](consultas/mssql-sp-1-6b-create.png)
+
+```sql
+EXEC sp_consulta_1_6b;
+```
+
+![Ejecución de sp_consulta_1_6b](consultas/mssql-sp-1-6b-call.png)
+
+**Resultado:** un solo producto, `Torta de chocolate Mini clasico` (`TORDE-533`, $24.150), que además está inactivo. Aquí `CONCAT` acepta los tres argumentos, a diferencia de Oracle, que solo admite dos.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_6c AS
+SELECT S.date, S.status, P.name
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id)
+JOIN products AS P ON (P.id = SD.item_id)
+WHERE S.status = 'cancelled' AND P.name LIKE 'Pan%';
+```
+
+![Creación de sp_consulta_1_6c](consultas/mssql-sp-1-6c-create.png)
+
+```sql
+EXEC sp_consulta_1_6c;
+```
+
+![Ejecución de sp_consulta_1_6c](consultas/mssql-sp-1-6c-call.png)
+
+**Resultado:** 4 filas: `Pan de yema Individual gourmet`, dos de `Pan de queso Mediano` y `Pan multigrano Grande`. De las 10 líneas canceladas, 4 son panes.
+
+#### 3.16.7 Filtro con `BETWEEN` sobre cuatro tablas
+
+**Narrativa:** responde "¿qué productos se vendieron y cómo se pagaron entre el 1 de junio de 2025 y el 30 de marzo de 2026?". Encadena `products`, `sale_details`, `sales` y `payments`. Como `payments.reference_id` apunta a la venta, la unión exige también `reference_type = 'sale'`. `BETWEEN` acota la fecha del pago.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_7 AS
+SELECT P.name, P.sku, SD.quantity, SD.total, S.date, PAY.method
+FROM products P
+JOIN sale_details SD ON P.id = SD.item_id
+JOIN sales S ON SD.header_id = S.id
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+ORDER BY PAY.date ASC;
+```
+
+![Creación de sp_consulta_1_7](consultas/mssql-sp-1-7-create.png)
+
+```sql
+EXEC sp_consulta_1_7;
+```
+
+![Ejecución de sp_consulta_1_7](consultas/mssql-sp-1-7-call.png)
+
+**Resultado:** 97 filas. Una misma línea de venta se repite cuando la venta tiene varios pagos, por ejemplo el `Pan de leche Mini` pagado en efectivo y con tarjeta. Es el resultado esperado de unir dos relaciones 1:N sobre la misma venta.
+
+#### 3.16.8 Agrupamiento con `GROUP BY` y `HAVING`
+
+**Narrativa:** tres resúmenes de pagos por venta con `SUM`, `COUNT` y `AVG`. Responden cuánto se pagó por cada venta, cuántos pagos fueron y cuál fue el promedio. Las dos primeras acotan las filas con `WHERE` antes de agrupar: la primera por rango de fechas y la segunda por estado y método de pago. La tercera filtra con `HAVING` después de agrupar, porque la condición depende de la suma ya calculada.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_8a AS
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count, AVG(PAY.amount) AS avg_payment
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+![Creación de sp_consulta_1_8a](consultas/mssql-sp-1-8a-create.png)
+
+```sql
+EXEC sp_consulta_1_8a;
+```
+
+![Ejecución de sp_consulta_1_8a](consultas/mssql-sp-1-8a-call.png)
+
+**Resultado:** 65 ventas con pagos en el rango. La venta 52 encabeza con $942.692,25 en 6 pagos. `AVG` sobre una columna `DECIMAL` muestra seis decimales en SQL Server.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_8b AS
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.status = 'completed' AND PAY.method = 'card'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+![Creación de sp_consulta_1_8b](consultas/mssql-sp-1-8b-create.png)
+
+```sql
+EXEC sp_consulta_1_8b;
+```
+
+![Ejecución de sp_consulta_1_8b](consultas/mssql-sp-1-8b-call.png)
+
+**Resultado:** 19 ventas tienen pagos con tarjeta ya completados. La venta 52 vuelve a encabezar, con $328.898,26 en 2 pagos.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_8c AS
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+GROUP BY S.id, S.date
+HAVING SUM(PAY.amount) >= 100000
+ORDER BY total_paid DESC;
+```
+
+![Creación de sp_consulta_1_8c](consultas/mssql-sp-1-8c-create.png)
+
+```sql
+EXEC sp_consulta_1_8c;
+```
+
+![Ejecución de sp_consulta_1_8c](consultas/mssql-sp-1-8c-call.png)
+
+**Resultado:** 48 ventas acumulan $100.000 o más en pagos, y la venta 52 vuelve a ser la mayor, con $942.692,25. Esta consulta no lleva filtro de fechas, así que considera todos los pagos registrados.
+
+#### 3.16.9 Subconsultas y teoría de conjuntos
+
+**Narrativa:** responde "¿qué productos no se vendieron entre el 1 de junio de 2025 y el 30 de marzo de 2026?". Es una diferencia de conjuntos: todos los productos menos los que aparecen en alguna línea de venta del rango. La primera forma usa `NOT IN` con una subconsulta. La segunda usa `LEFT JOIN` con `WHERE S.id IS NULL`.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_9a AS
+SELECT * FROM products AS P
+WHERE P.id NOT IN (
+  SELECT SD.item_id FROM sale_details SD
+  JOIN sales S ON SD.header_id = S.id
+  WHERE S.date BETWEEN '2025-06-01' AND '2026-03-30');
+```
+
+![Creación de sp_consulta_1_9a](consultas/mssql-sp-1-9a-create.png)
+
+```sql
+EXEC sp_consulta_1_9a;
+```
+
+![Ejecución de sp_consulta_1_9a](consultas/mssql-sp-1-9a-call.png)
+
+**Resultado:** 36 de los 100 productos no tuvieron ventas en el rango, y los otros 64 sí se vendieron al menos una vez.
+
+```sql
+CREATE OR ALTER PROCEDURE sp_consulta_1_9b AS
+SELECT * FROM products AS P
+LEFT JOIN sale_details AS SD ON (P.id = SD.item_id)
+LEFT JOIN sales AS S ON (SD.header_id = S.id AND S.date BETWEEN '2025-06-01' AND '2026-03-30')
+WHERE S.id IS NULL;
+```
+
+![Creación de sp_consulta_1_9b](consultas/mssql-sp-1-9b-create.png)
+
+```sql
+EXEC sp_consulta_1_9b;
+```
+
+![Ejecución de sp_consulta_1_9b](consultas/mssql-sp-1-9b-call.png)
+
+**Resultado:** los mismos 36 productos que la forma con `NOT IN`, lo que confirma que ambas expresiones de la diferencia de conjuntos son equivalentes.
+
+### 3.17 Triggers de auditoría
+
+Se crearon las tablas `products_audit` y `sales_audit`, que registran automáticamente cada inserción, actualización o eliminación sobre `products` y `sales`. Se eligieron estas dos tablas porque sus cambios pesan más en el negocio: el precio de un producto y el estado de una venta. Cada fila de auditoría guarda el estado anterior (`old_data`) y el posterior (`new_data`) en formato JSON, con la fecha del cambio.
+
+Cada tabla de auditoría tiene tres protecciones: un trigger de registro sobre la tabla original, uno que bloquea cualquier `UPDATE` o `DELETE` sobre la tabla de auditoría y uno que rechaza un `INSERT` directo que no venga del trigger de registro.
+
+**Diferencias con MySQL y PostgreSQL.**
+
+- SQL Server no tiene triggers `BEFORE`. Para bloquear `UPDATE` y `DELETE` se usa un trigger `INSTEAD OF`, que sustituye a la operación y lanza el error con `THROW`, de modo que la operación nunca se ejecuta.
+- El `INSERT` directo no se puede interceptar antes de que ocurra. Por eso el guardia es un trigger `AFTER INSERT` que, si la marca de autorización no está activa, deshace la transacción con `ROLLBACK` y lanza el error.
+- Un trigger de SQL Server se ejecuta una vez por sentencia, no por fila, y recibe las filas afectadas en las tablas virtuales `inserted` y `deleted`. Un solo trigger cubre los tres eventos (`AFTER INSERT, UPDATE, DELETE`). El tipo de operación se deduce de qué tablas traen la fila: solo `inserted` es un `INSERT`, solo `deleted` es un `DELETE` y ambas es un `UPDATE`. Para eso se unen con un `FULL OUTER JOIN`.
+- No existe un tipo `JSON` nativo. El JSON se genera con `FOR JSON PATH, WITHOUT_ARRAY_WRAPPER` y se guarda en una columna `NVARCHAR(MAX)`.
+- La marca que autoriza el `INSERT` es un valor de contexto de la sesión (`sp_set_session_context` y `SESSION_CONTEXT`). Se activa antes de insertar en la auditoría y se limpia después.
+
+**Incidente — error 102 al crear desde DBeaver.** Al crear el primer trigger desde DBeaver, SQL Server respondió `Incorrect syntax near ';'` (error `102`). El editor parte el script en el primer `;` que encuentra dentro del bloque `BEGIN ... END` y manda un trozo incompleto. Además, `GO` es una palabra del cliente y no de SQL Server. Es la misma limitación que apareció con los triggers de MySQL (error `1064`). Se resolvió ejecutando el script desde la terminal de la VPS con `sqlcmd`, que entiende `GO` y envía cada lote completo.
+
+```sql
+IF OBJECT_ID('products_audit', 'U') IS NULL
+CREATE TABLE products_audit (
+  id BIGINT IDENTITY(1,1) PRIMARY KEY,
+  product_id INT NOT NULL,
+  action VARCHAR(10) NOT NULL,
+  old_data NVARCHAR(MAX) NULL,
+  new_data NVARCHAR(MAX) NULL,
+  changed_at DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+
+IF OBJECT_ID('sales_audit', 'U') IS NULL
+CREATE TABLE sales_audit (
+  id BIGINT IDENTITY(1,1) PRIMARY KEY,
+  sale_id INT NOT NULL,
+  action VARCHAR(10) NOT NULL,
+  old_data NVARCHAR(MAX) NULL,
+  new_data NVARCHAR(MAX) NULL,
+  changed_at DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+GO
+
+CREATE OR ALTER TRIGGER trg_products_audit ON products AFTER INSERT, UPDATE, DELETE AS
+BEGIN
+  SET NOCOUNT ON;
+  EXEC sp_set_session_context @key = N'from_trigger', @value = 1;
+  INSERT INTO products_audit (product_id, action, old_data, new_data)
+  SELECT COALESCE(i.id, d.id),
+    CASE WHEN d.id IS NULL THEN 'INSERT' WHEN i.id IS NULL THEN 'DELETE' ELSE 'UPDATE' END,
+    CASE WHEN d.id IS NULL THEN NULL ELSE (SELECT d.id, d.sku, d.name, d.description, d.price, d.status FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) END,
+    CASE WHEN i.id IS NULL THEN NULL ELSE (SELECT i.id, i.sku, i.name, i.description, i.price, i.status FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) END
+  FROM inserted i FULL OUTER JOIN deleted d ON i.id = d.id;
+  EXEC sp_set_session_context @key = N'from_trigger', @value = NULL;
+END;
+GO
+
+CREATE OR ALTER TRIGGER trg_sales_audit ON sales AFTER INSERT, UPDATE, DELETE AS
+BEGIN
+  SET NOCOUNT ON;
+  EXEC sp_set_session_context @key = N'from_trigger', @value = 1;
+  INSERT INTO sales_audit (sale_id, action, old_data, new_data)
+  SELECT COALESCE(i.id, d.id),
+    CASE WHEN d.id IS NULL THEN 'INSERT' WHEN i.id IS NULL THEN 'DELETE' ELSE 'UPDATE' END,
+    CASE WHEN d.id IS NULL THEN NULL ELSE (SELECT d.id, d.client_id, d.[date], d.subtotal, d.taxes, d.total, d.status FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) END,
+    CASE WHEN i.id IS NULL THEN NULL ELSE (SELECT i.id, i.client_id, i.[date], i.subtotal, i.taxes, i.total, i.status FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) END
+  FROM inserted i FULL OUTER JOIN deleted d ON i.id = d.id;
+  EXEC sp_set_session_context @key = N'from_trigger', @value = NULL;
+END;
+GO
+
+CREATE OR ALTER TRIGGER trg_products_audit_block ON products_audit INSTEAD OF UPDATE, DELETE AS
+BEGIN
+  SET NOCOUNT ON;
+  THROW 50001, 'products_audit es inmutable: UPDATE/DELETE prohibido.', 1;
+END;
+GO
+
+CREATE OR ALTER TRIGGER trg_products_audit_guard ON products_audit AFTER INSERT AS
+BEGIN
+  SET NOCOUNT ON;
+  IF ISNULL(CONVERT(INT, SESSION_CONTEXT(N'from_trigger')), 0) <> 1
+  BEGIN
+    ROLLBACK TRANSACTION;
+    THROW 50003, 'INSERT en products_audit solo permitido desde triggers de products.', 1;
+  END
+END;
+GO
+
+CREATE OR ALTER TRIGGER trg_sales_audit_block ON sales_audit INSTEAD OF UPDATE, DELETE AS
+BEGIN
+  SET NOCOUNT ON;
+  THROW 50001, 'sales_audit es inmutable: UPDATE/DELETE prohibido.', 1;
+END;
+GO
+
+CREATE OR ALTER TRIGGER trg_sales_audit_guard ON sales_audit AFTER INSERT AS
+BEGIN
+  SET NOCOUNT ON;
+  IF ISNULL(CONVERT(INT, SESSION_CONTEXT(N'from_trigger')), 0) <> 1
+  BEGIN
+    ROLLBACK TRANSACTION;
+    THROW 50003, 'INSERT en sales_audit solo permitido desde triggers de sales.', 1;
+  END
+END;
+GO
+```
+
+```bash
+docker exec -i mssql-server /opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P '****' -C -d hornoraiz < ~/sqlserver-triggers.sql
+```
+
+![Ejecución del archivo sqlserver-triggers.sql en la terminal de la VPS](consultas/mssql-trg-02-terminal.png)
+
+**Verificación.** El modelo original ya traía triggers con nombres en español, por lo que la consulta filtra los de auditoría por nombre. Deben salir seis:
+
+```sql
+SELECT name, OBJECT_NAME(parent_id) AS tabla FROM sys.triggers WHERE name LIKE '%audit%' ORDER BY 2,1;
+```
+
+![Los 6 triggers de auditoría](consultas/mssql-trg-01-lista.png)
+
+#### Prueba de `products_audit`
+
+Se insertó un producto de prueba (`TEST-001`), se le cambió el precio y se borró. Se usó un producto nuevo para no alterar los datos de las consultas.
+
+```sql
+INSERT INTO products (sku, name, description, price, status) VALUES ('TEST-001','Producto de prueba','Prueba de auditoria',1000.00,1);
+UPDATE products SET price = 1500.00 WHERE sku = 'TEST-001';
+DELETE FROM products WHERE sku = 'TEST-001';
+SELECT TOP 3 id, product_id, action, old_data, new_data FROM products_audit ORDER BY id DESC;
+```
+
+![Registros de products_audit](consultas/mssql-trg-03-products-audit.png)
+
+**Resultado:** se registraron las tres operaciones sobre el producto de prueba: el `INSERT` con precio 1000, el `UPDATE` con `old_data` en 1000 y `new_data` en 1500, y el `DELETE` con el estado final (precio 1500). Cada registro guarda la fila completa en JSON, con todas las columnas del producto.
+
+#### Prueba de `sales_audit`
+
+```sql
+INSERT INTO sales (client_id, [date], subtotal, taxes, total, status) VALUES (NULL, SYSDATETIME(), 1000, 190, 1190, 'pending');
+UPDATE sales SET status = 'paid' WHERE id = (SELECT MAX(id) FROM sales);
+DELETE FROM sales WHERE id = (SELECT MAX(id) FROM sales);
+SELECT TOP 3 id, sale_id, action, old_data, new_data FROM sales_audit ORDER BY id DESC;
+```
+
+![Registros de sales_audit](consultas/mssql-trg-04-sales-audit.png)
+
+**Resultado:** para la venta de prueba quedaron el `INSERT` en `pending`, el `UPDATE` de `pending` a `paid` y el `DELETE` con el último estado. La auditoría capta el cambio de estado de la venta, que es el dato que más interesa.
+
+#### Pruebas de inmutabilidad
+
+Se intentó alterar las tablas de auditoría. Las cuatro operaciones fueron rechazadas por los triggers de protección:
+
+```sql
+UPDATE products_audit SET action = 'X' WHERE id = 1;
+DELETE FROM products_audit WHERE id = 1;
+INSERT INTO products_audit (product_id, action, old_data, new_data) VALUES (999,'INSERT',NULL,NULL);
+UPDATE sales_audit SET action = 'X' WHERE id = 1;
+```
+
+![UPDATE sobre products_audit rechazado](consultas/mssql-trg-05-update-products.png)
+
+![DELETE sobre products_audit rechazado](consultas/mssql-trg-06-delete-products.png)
+
+![INSERT directo sobre products_audit rechazado](consultas/mssql-trg-07-insert-products.png)
+
+![UPDATE sobre sales_audit rechazado](consultas/mssql-trg-08-update-sales.png)
+
+**Resultado:** los mensajes fueron `products_audit es inmutable: UPDATE/DELETE prohibido.` (para el `UPDATE` y para el `DELETE`), `INSERT en products_audit solo permitido desde triggers de products.` y `sales_audit es inmutable: UPDATE/DELETE prohibido.`. Al final, `products` y `sales` quedaron con 100 filas cada una, igual que antes de las pruebas.
+
+**Limitación.** La sentencia `TRUNCATE TABLE` no dispara triggers, así que no queda cubierta por esta protección. Como esa sentencia exige el permiso `ALTER` sobre la tabla, habría que quitárselo sobre las tablas de auditoría a los usuarios que no sean administradores.
