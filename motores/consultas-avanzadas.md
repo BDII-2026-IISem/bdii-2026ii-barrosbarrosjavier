@@ -3053,3 +3053,556 @@ UPDATE sales_audit SET action = 'X' WHERE id = 1;
 **Resultado:** los mensajes fueron `products_audit es inmutable: UPDATE/DELETE prohibido.` (para el `UPDATE` y para el `DELETE`), `INSERT en products_audit solo permitido desde triggers de products.` y `sales_audit es inmutable: UPDATE/DELETE prohibido.`. Al final, `products` y `sales` quedaron con 100 filas cada una, igual que antes de las pruebas.
 
 **Limitación.** La sentencia `TRUNCATE TABLE` no dispara triggers, así que no queda cubierta por esta protección. Como esa sentencia exige el permiso `ALTER` sobre la tabla, habría que quitárselo sobre las tablas de auditoría a los usuarios que no sean administradores.
+
+### 4.16 Procedimientos almacenados
+
+Las 15 consultas de la sección 4.15 se llevaron a procedimientos almacenados con el nombre `sp_consulta_<número>`, igual que en los otros tres motores.
+
+**Diferencias con los otros motores.** En Oracle un procedimiento no devuelve filas por sí solo. Cada uno abre un cursor (`SYS_REFCURSOR`) con la consulta y lo entrega al cliente con `DBMS_SQL.RETURN_RESULT`, que devuelve un resultado implícito: la grilla aparece al ejecutar el procedimiento, sin tener que leer un cursor aparte como en PostgreSQL. Se ejecuta con un bloque `BEGIN ... END;`.
+
+Se conservaron las particularidades de Oracle ya documentadas en las consultas:
+
+- La columna `date` va entre comillas dobles (`"date"`), porque `DATE` es una palabra reservada (sección 4.2).
+- Los alias de tabla se escriben sin `AS`.
+- `CONCAT` solo admite dos argumentos, por lo que el patrón `%chocolate%` se arma con dos llamadas anidadas.
+- Las fechas de `BETWEEN` se convierten explícitamente con `TO_DATE`.
+- `LIKE` distingue mayúsculas de minúsculas, y los nombres del catálogo empiezan en mayúscula, por lo que `'Pan%'` es suficiente.
+
+**Creación.** Cada procedimiento se creó uno por uno desde DBeaver, seleccionando su bloque `CREATE OR REPLACE PROCEDURE ... END;` y ejecutándolo con `Ctrl+Enter`. Después se consultó el diccionario de datos para comprobar que los 15 compilaron sin errores:
+
+```sql
+SELECT object_name, status FROM user_objects WHERE object_type = 'PROCEDURE' AND object_name LIKE 'SP_CONSULTA%' ORDER BY object_name;
+```
+
+![Los 15 procedimientos en estado VALID](consultas/oracle-sp-creacion.png)
+
+#### 4.16.1 Mostrar algunos de los registros de `products`
+
+**Narrativa:** es el punto de partida para comprobar que el catálogo se cargó completo. Proyecta solo `sku`, `name`, `price` y `status`, en vez de traer la tabla entera.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_1 AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT sku, name, price, status FROM products;
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_1](consultas/oracle-sp-1-1-create.png)
+
+```sql
+BEGIN sp_consulta_1_1; END;
+```
+
+![Ejecución de sp_consulta_1_1](consultas/oracle-sp-1-1-call.png)
+
+**Resultado:** devolvió 100 productos: 90 con `status = 1` y 10 con `0`, las mismas proporciones de los otros motores. `CIA-859` aparece a $7.950.
+
+#### 4.16.2 Ventas ordenadas de la más reciente a la más antigua
+
+**Narrativa:** responde "¿qué se vendió últimamente?". Usa `ORDER BY "date" DESC` sobre `sales`, de modo que la primera fila sea la venta más nueva.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_2 AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT id, "date", subtotal, status FROM sales ORDER BY "date" DESC;
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_2](consultas/oracle-sp-1-2-create.png)
+
+```sql
+BEGIN sp_consulta_1_2; END;
+```
+
+![Ejecución de sp_consulta_1_2](consultas/oracle-sp-1-2-call.png)
+
+**Resultado:** devolvió las 100 ventas, de la venta 10 (27 de marzo de 2026, pendiente) a la venta 45 (2 de junio de 2025), en el mismo orden que en los otros motores.
+
+#### 4.16.3 Ventas con sus líneas de detalle, relación en `WHERE`
+
+**Narrativa:** relaciona cada línea de `sale_details` con su venta mediante `S.id = SD.header_id` en el `WHERE`. Muestra qué productos y cantidades componen cada venta.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_3 AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT * FROM sale_details SD, sales S WHERE S.id = SD.header_id;
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_3](consultas/oracle-sp-1-3-create.png)
+
+```sql
+BEGIN sp_consulta_1_3; END;
+```
+
+![Ejecución de sp_consulta_1_3](consultas/oracle-sp-1-3-call.png)
+
+**Resultado:** 100 filas, una por línea de detalle, con las columnas de `sale_details` y de `sales` juntas. Ninguna línea quedó sin venta.
+
+#### 4.16.4 Ventas con sus líneas de detalle, relación con `JOIN`
+
+**Narrativa:** la misma pregunta que la 4.16.3, resuelta con `JOIN ... ON`. Proyecta de `sales` solo la fecha y el estado, y de `sale_details` todas las columnas.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_4 AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT S."date", S.status, SD.* FROM sales S JOIN sale_details SD ON (S.id = SD.header_id);
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_4](consultas/oracle-sp-1-4-create.png)
+
+```sql
+BEGIN sp_consulta_1_4; END;
+```
+
+![Ejecución de sp_consulta_1_4](consultas/oracle-sp-1-4-call.png)
+
+**Resultado:** las mismas 100 filas que el procedimiento anterior, lo que confirma que ambas sintaxis son equivalentes.
+
+#### 4.16.5 Filtro por estado de la venta
+
+**Narrativa:** reparte las líneas de detalle según el estado de su venta. El estado se filtra en `sales`, porque `sale_details` no tiene columna `status`. La primera usa la relación en `WHERE` y mide las ventas pagadas. La segunda usa `JOIN` y aísla las canceladas.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_5a AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT * FROM sale_details SD, sales S WHERE S.id = SD.header_id AND S.status = 'paid';
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_5a](consultas/oracle-sp-1-5a-create.png)
+
+```sql
+BEGIN sp_consulta_1_5a; END;
+```
+
+![Ejecución de sp_consulta_1_5a](consultas/oracle-sp-1-5a-call.png)
+
+**Resultado:** 86 de las 100 líneas (86 %) pertenecen a ventas pagadas.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_5b AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT S."date", S.status, SD.* FROM sales S JOIN sale_details SD ON (S.id = SD.header_id) WHERE S.status = 'cancelled';
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_5b](consultas/oracle-sp-1-5b-create.png)
+
+```sql
+BEGIN sp_consulta_1_5b; END;
+```
+
+![Ejecución de sp_consulta_1_5b](consultas/oracle-sp-1-5b-call.png)
+
+**Resultado:** 10 líneas, que corresponden a 4 ventas canceladas (39, 40, 48 y 72). Las 4 líneas restantes pertenecen a ventas pendientes.
+
+#### 4.16.6 Filtros con `LIKE`
+
+**Narrativa:** tres búsquedas por patrón de texto. La primera lista los productos cuyo nombre empieza por "Pan". La segunda busca la palabra "chocolate" en cualquier posición de la descripción. La tercera combina el texto con el estado de la venta, para ver qué productos "Pan" se cancelaron.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_6a AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT * FROM products P WHERE P.name LIKE 'Pan%';
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_6a](consultas/oracle-sp-1-6a-create.png)
+
+```sql
+BEGIN sp_consulta_1_6a; END;
+```
+
+![Ejecución de sp_consulta_1_6a](consultas/oracle-sp-1-6a-call.png)
+
+**Resultado:** 29 productos. El patrón incluye también Panettone y Panque, porque solo exige que el nombre comience por "Pan". Dos están inactivos: `PAN-600` y `PANDE-936`.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_6b AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT * FROM products P WHERE P.description LIKE CONCAT(CONCAT('%','chocolate'),'%');
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_6b](consultas/oracle-sp-1-6b-create.png)
+
+```sql
+BEGIN sp_consulta_1_6b; END;
+```
+
+![Ejecución de sp_consulta_1_6b](consultas/oracle-sp-1-6b-call.png)
+
+**Resultado:** un solo producto, `Torta de chocolate Mini clasico` (`TORDE-533`, $24.150), que además está inactivo. Como `CONCAT` solo acepta dos argumentos en Oracle, el patrón `%chocolate%` se arma con dos llamadas anidadas.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_6c AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT S."date", S.status, P.name
+    FROM sales S
+    JOIN sale_details SD ON (S.id = SD.header_id)
+    JOIN products P ON (P.id = SD.item_id)
+    WHERE S.status = 'cancelled' AND P.name LIKE 'Pan%';
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_6c](consultas/oracle-sp-1-6c-create.png)
+
+```sql
+BEGIN sp_consulta_1_6c; END;
+```
+
+![Ejecución de sp_consulta_1_6c](consultas/oracle-sp-1-6c-call.png)
+
+**Resultado:** 4 filas: `Pan de yema Individual gourmet`, dos de `Pan de queso Mediano` y `Pan multigrano Grande`. De las 10 líneas canceladas, 4 son panes.
+
+#### 4.16.7 Filtro con `BETWEEN` sobre cuatro tablas
+
+**Narrativa:** responde "¿qué productos se vendieron y cómo se pagaron entre el 1 de junio de 2025 y el 30 de marzo de 2026?". Encadena `products`, `sale_details`, `sales` y `payments`. Como `payments.reference_id` apunta a la venta, la unión exige también `reference_type = 'sale'`. `BETWEEN` acota la fecha del pago, con las dos fechas convertidas con `TO_DATE`.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_7 AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT P.name, P.sku, SD.quantity, SD.total, S."date", PAY.method
+    FROM products P
+    JOIN sale_details SD ON P.id = SD.item_id
+    JOIN sales S ON SD.header_id = S.id
+    JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+    WHERE PAY."date" BETWEEN TO_DATE('2025-06-01','YYYY-MM-DD') AND TO_DATE('2026-03-30','YYYY-MM-DD')
+    ORDER BY PAY."date" ASC;
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_7](consultas/oracle-sp-1-7-create.png)
+
+```sql
+BEGIN sp_consulta_1_7; END;
+```
+
+![Ejecución de sp_consulta_1_7](consultas/oracle-sp-1-7-call.png)
+
+**Resultado:** 97 filas. Una misma línea de venta se repite cuando la venta tiene varios pagos, por ejemplo el `Pan de leche Mini` pagado en efectivo y con tarjeta. Es el resultado esperado de unir dos relaciones 1:N sobre la misma venta.
+
+#### 4.16.8 Agrupamiento con `GROUP BY` y `HAVING`
+
+**Narrativa:** tres resúmenes de pagos por venta con `SUM`, `COUNT` y `AVG`. Responden cuánto se pagó por cada venta, cuántos pagos fueron y cuál fue el promedio. Las dos primeras acotan las filas con `WHERE` antes de agrupar: la primera por rango de fechas y la segunda por estado y método de pago. La tercera filtra con `HAVING` después de agrupar, porque la condición depende de la suma ya calculada.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_8a AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT S.id, S."date", SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count, AVG(PAY.amount) AS avg_payment
+    FROM sales S
+    JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+    WHERE PAY."date" BETWEEN TO_DATE('2025-06-01','YYYY-MM-DD') AND TO_DATE('2026-03-30','YYYY-MM-DD')
+    GROUP BY S.id, S."date"
+    ORDER BY total_paid DESC;
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_8a](consultas/oracle-sp-1-8a-create.png)
+
+```sql
+BEGIN sp_consulta_1_8a; END;
+```
+
+![Ejecución de sp_consulta_1_8a](consultas/oracle-sp-1-8a-call.png)
+
+**Resultado:** 65 ventas con pagos en el rango. La venta 52 encabeza con $942.692,25 en 6 pagos. `AVG` sobre `NUMBER` en Oracle muestra muchos decimales cuando la división no es exacta.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_8b AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT S.id, S."date", SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+    FROM sales S
+    JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+    WHERE PAY.status = 'completed' AND PAY.method = 'card'
+    GROUP BY S.id, S."date"
+    ORDER BY total_paid DESC;
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_8b](consultas/oracle-sp-1-8b-create.png)
+
+```sql
+BEGIN sp_consulta_1_8b; END;
+```
+
+![Ejecución de sp_consulta_1_8b](consultas/oracle-sp-1-8b-call.png)
+
+**Resultado:** 19 ventas tienen pagos con tarjeta ya completados. La venta 52 vuelve a encabezar, con $328.898,26 en 2 pagos.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_8c AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT S.id, S."date", SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+    FROM sales S
+    JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+    GROUP BY S.id, S."date"
+    HAVING SUM(PAY.amount) >= 100000
+    ORDER BY total_paid DESC;
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_8c](consultas/oracle-sp-1-8c-create.png)
+
+```sql
+BEGIN sp_consulta_1_8c; END;
+```
+
+![Ejecución de sp_consulta_1_8c](consultas/oracle-sp-1-8c-call.png)
+
+**Resultado:** 48 ventas acumulan $100.000 o más en pagos, y la venta 52 vuelve a ser la mayor, con $942.692,25. Esta consulta no lleva filtro de fechas, así que considera todos los pagos registrados.
+
+#### 4.16.9 Subconsultas y teoría de conjuntos
+
+**Narrativa:** responde "¿qué productos no se vendieron entre el 1 de junio de 2025 y el 30 de marzo de 2026?". Es una diferencia de conjuntos: todos los productos menos los que aparecen en alguna línea de venta del rango. La primera forma usa `NOT IN` con una subconsulta. La segunda usa `LEFT JOIN` con `WHERE S.id IS NULL`.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_9a AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT * FROM products P
+    WHERE P.id NOT IN (
+      SELECT SD.item_id FROM sale_details SD
+      JOIN sales S ON SD.header_id = S.id
+      WHERE S."date" BETWEEN TO_DATE('2025-06-01','YYYY-MM-DD') AND TO_DATE('2026-03-30','YYYY-MM-DD'));
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_9a](consultas/oracle-sp-1-9a-create.png)
+
+```sql
+BEGIN sp_consulta_1_9a; END;
+```
+
+![Ejecución de sp_consulta_1_9a](consultas/oracle-sp-1-9a-call.png)
+
+**Resultado:** 36 de los 100 productos no tuvieron ventas en el rango, y los otros 64 sí se vendieron al menos una vez.
+
+```sql
+CREATE OR REPLACE PROCEDURE sp_consulta_1_9b AS
+  c SYS_REFCURSOR;
+BEGIN
+  OPEN c FOR SELECT * FROM products P
+    LEFT JOIN sale_details SD ON (P.id = SD.item_id)
+    LEFT JOIN sales S ON (SD.header_id = S.id AND S."date" BETWEEN TO_DATE('2025-06-01','YYYY-MM-DD') AND TO_DATE('2026-03-30','YYYY-MM-DD'))
+    WHERE S.id IS NULL;
+  DBMS_SQL.RETURN_RESULT(c);
+END;
+```
+
+![Creación de sp_consulta_1_9b](consultas/oracle-sp-1-9b-create.png)
+
+```sql
+BEGIN sp_consulta_1_9b; END;
+```
+
+![Ejecución de sp_consulta_1_9b](consultas/oracle-sp-1-9b-call.png)
+
+**Resultado:** los mismos 36 productos que la forma con `NOT IN`, lo que confirma que ambas expresiones de la diferencia de conjuntos son equivalentes.
+
+### 4.17 Triggers de auditoría
+
+Se crearon las tablas `products_audit` y `sales_audit`, que registran automáticamente cada inserción, actualización o eliminación sobre `products` y `sales`. Se eligieron estas dos tablas porque sus cambios pesan más en el negocio: el precio de un producto y el estado de una venta. Cada fila de auditoría guarda el estado anterior (`old_data`) y el posterior (`new_data`) en formato JSON, con la fecha del cambio.
+
+Cada tabla de auditoría tiene tres protecciones: un trigger de registro sobre la tabla original, uno que bloquea cualquier `UPDATE` o `DELETE` sobre la tabla de auditoría y uno que rechaza un `INSERT` directo que no venga del trigger de registro.
+
+**Diferencias con los otros motores.**
+
+- Oracle sí tiene triggers `BEFORE`, como MySQL, y trabaja por fila (`FOR EACH ROW`) con los valores `:OLD` y `:NEW`.
+- Un solo trigger cubre los tres eventos (`AFTER INSERT OR UPDATE OR DELETE`), y los predicados `INSERTING`, `UPDATING` y `DELETING` indican cuál ocurrió.
+- El JSON se arma con la función nativa `JSON_OBJECT(... VALUE ...)` y se guarda en una columna `CLOB`. Se serializan las columnas principales de cada tabla (`id`, `sku`, `name`, `price` y `status` en productos; `id`, `client_id`, `date`, `total` y `status` en ventas), no la fila completa como en PostgreSQL.
+- La marca que autoriza el `INSERT` es una variable de un paquete (`audit_ctx.from_trigger`). Se activa antes de insertar en la auditoría y se limpia después. Al ser una variable de paquete, su valor es propio de cada sesión.
+- Los errores se lanzan con `RAISE_APPLICATION_ERROR` y códigos definidos por el usuario: `-20001` para el bloqueo de `UPDATE` y `DELETE`, y `-20003` para el `INSERT` directo.
+- La columna `date` de `sales` se escribe entre comillas dobles (`:NEW."date"`), por ser `DATE` una palabra reservada (sección 4.2).
+
+**Creación por terminal.** El script crea el paquete, las dos tablas y los seis triggers. Se ejecutó desde un archivo con `sqlplus` en la VPS, que interpreta el terminador `/` de cada bloque PL/SQL y corre todo de una vez.
+
+```sql
+CREATE OR REPLACE PACKAGE audit_ctx AS
+  from_trigger NUMBER := 0;
+END audit_ctx;
+/
+CREATE TABLE products_audit (
+  id NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  product_id NUMBER NOT NULL,
+  action VARCHAR2(10) NOT NULL,
+  old_data CLOB,
+  new_data CLOB,
+  changed_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+);
+CREATE TABLE sales_audit (
+  id NUMBER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  sale_id NUMBER NOT NULL,
+  action VARCHAR2(10) NOT NULL,
+  old_data CLOB,
+  new_data CLOB,
+  changed_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+);
+CREATE OR REPLACE TRIGGER trg_products_audit
+AFTER INSERT OR UPDATE OR DELETE ON products
+FOR EACH ROW
+BEGIN
+  audit_ctx.from_trigger := 1;
+  IF INSERTING THEN
+    INSERT INTO products_audit (product_id, action, old_data, new_data)
+    VALUES (:NEW.id, 'INSERT', NULL, JSON_OBJECT('id' VALUE :NEW.id, 'sku' VALUE :NEW.sku, 'name' VALUE :NEW.name, 'price' VALUE :NEW.price, 'status' VALUE :NEW.status));
+  ELSIF UPDATING THEN
+    INSERT INTO products_audit (product_id, action, old_data, new_data)
+    VALUES (:NEW.id, 'UPDATE',
+      JSON_OBJECT('id' VALUE :OLD.id, 'sku' VALUE :OLD.sku, 'name' VALUE :OLD.name, 'price' VALUE :OLD.price, 'status' VALUE :OLD.status),
+      JSON_OBJECT('id' VALUE :NEW.id, 'sku' VALUE :NEW.sku, 'name' VALUE :NEW.name, 'price' VALUE :NEW.price, 'status' VALUE :NEW.status));
+  ELSE
+    INSERT INTO products_audit (product_id, action, old_data, new_data)
+    VALUES (:OLD.id, 'DELETE', JSON_OBJECT('id' VALUE :OLD.id, 'sku' VALUE :OLD.sku, 'name' VALUE :OLD.name, 'price' VALUE :OLD.price, 'status' VALUE :OLD.status), NULL);
+  END IF;
+  audit_ctx.from_trigger := 0;
+END;
+/
+CREATE OR REPLACE TRIGGER trg_sales_audit
+AFTER INSERT OR UPDATE OR DELETE ON sales
+FOR EACH ROW
+BEGIN
+  audit_ctx.from_trigger := 1;
+  IF INSERTING THEN
+    INSERT INTO sales_audit (sale_id, action, old_data, new_data)
+    VALUES (:NEW.id, 'INSERT', NULL, JSON_OBJECT('id' VALUE :NEW.id, 'client_id' VALUE :NEW.client_id, 'date' VALUE :NEW."date", 'total' VALUE :NEW.total, 'status' VALUE :NEW.status));
+  ELSIF UPDATING THEN
+    INSERT INTO sales_audit (sale_id, action, old_data, new_data)
+    VALUES (:NEW.id, 'UPDATE',
+      JSON_OBJECT('id' VALUE :OLD.id, 'client_id' VALUE :OLD.client_id, 'date' VALUE :OLD."date", 'total' VALUE :OLD.total, 'status' VALUE :OLD.status),
+      JSON_OBJECT('id' VALUE :NEW.id, 'client_id' VALUE :NEW.client_id, 'date' VALUE :NEW."date", 'total' VALUE :NEW.total, 'status' VALUE :NEW.status));
+  ELSE
+    INSERT INTO sales_audit (sale_id, action, old_data, new_data)
+    VALUES (:OLD.id, 'DELETE', JSON_OBJECT('id' VALUE :OLD.id, 'client_id' VALUE :OLD.client_id, 'date' VALUE :OLD."date", 'total' VALUE :OLD.total, 'status' VALUE :OLD.status), NULL);
+  END IF;
+  audit_ctx.from_trigger := 0;
+END;
+/
+CREATE OR REPLACE TRIGGER trg_products_audit_block
+BEFORE UPDATE OR DELETE ON products_audit
+FOR EACH ROW
+BEGIN
+  RAISE_APPLICATION_ERROR(-20001, 'products_audit es inmutable: UPDATE/DELETE prohibido.');
+END;
+/
+CREATE OR REPLACE TRIGGER trg_products_audit_guard
+BEFORE INSERT ON products_audit
+FOR EACH ROW
+BEGIN
+  IF audit_ctx.from_trigger <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20003, 'INSERT en products_audit solo permitido desde triggers de products.');
+  END IF;
+END;
+/
+CREATE OR REPLACE TRIGGER trg_sales_audit_block
+BEFORE UPDATE OR DELETE ON sales_audit
+FOR EACH ROW
+BEGIN
+  RAISE_APPLICATION_ERROR(-20001, 'sales_audit es inmutable: UPDATE/DELETE prohibido.');
+END;
+/
+CREATE OR REPLACE TRIGGER trg_sales_audit_guard
+BEFORE INSERT ON sales_audit
+FOR EACH ROW
+BEGIN
+  IF audit_ctx.from_trigger <> 1 THEN
+    RAISE_APPLICATION_ERROR(-20003, 'INSERT en sales_audit solo permitido desde triggers de sales.');
+  END IF;
+END;
+/
+```
+
+```bash
+docker exec -i oracle-server sqlplus -s admin/****@//localhost:1521/hornoraiz < ~/oracle-triggers.sql
+```
+
+![Ejecución del archivo oracle-triggers.sql en la terminal de la VPS](consultas/oracle-trg-02-terminal.png)
+
+**Verificación.** Desde DBeaver se comprobó que los seis triggers quedaron habilitados y que el diccionario de errores de compilación está vacío:
+
+```sql
+SELECT trigger_name, table_name, status FROM user_triggers WHERE trigger_name LIKE '%AUDIT%' ORDER BY 2,1;
+SELECT name, type, line, text FROM user_errors;
+```
+
+![Los 6 triggers de auditoría habilitados](consultas/oracle-trg-01-lista.png)
+
+#### Prueba de `products_audit`
+
+Los datos se cargaron con ids propios (1 a 100), por lo que las pruebas usan un `id` explícito (9001). Se insertó un producto de prueba, se le cambió el precio y se borró.
+
+```sql
+INSERT INTO products (id, sku, name, description, price, status) VALUES (9001,'TEST-001','Producto de prueba','Prueba de auditoria',1000,1);
+UPDATE products SET price = 1500 WHERE id = 9001;
+DELETE FROM products WHERE id = 9001;
+SELECT id, product_id, action, old_data, new_data FROM products_audit ORDER BY id DESC FETCH FIRST 3 ROWS ONLY;
+```
+
+![Registros de products_audit](consultas/oracle-trg-03-products-audit.png)
+
+**Resultado:** se registraron las tres operaciones sobre el producto 9001: el `INSERT` con precio 1000, el `UPDATE` con `old_data` en 1000 y `new_data` en 1500, y el `DELETE` con el estado final (precio 1500).
+
+#### Prueba de `sales_audit`
+
+```sql
+INSERT INTO sales (id, client_id, "date", subtotal, taxes, total, status) VALUES (9001, NULL, SYSTIMESTAMP, 1000, 190, 1190, 'pending');
+UPDATE sales SET status = 'paid' WHERE id = 9001;
+DELETE FROM sales WHERE id = 9001;
+SELECT id, sale_id, action, old_data, new_data FROM sales_audit ORDER BY id DESC FETCH FIRST 3 ROWS ONLY;
+```
+
+![Registros de sales_audit](consultas/oracle-trg-04-sales-audit.png)
+
+**Resultado:** para la venta 9001 quedaron el `INSERT` en `pending`, el `UPDATE` de `pending` a `paid` y el `DELETE` con el último estado. La auditoría capta el cambio de estado de la venta, que es el dato que más interesa.
+
+#### Pruebas de inmutabilidad
+
+Con las dos tablas de auditoría ya con filas, se intentó alterarlas. Las cuatro operaciones fueron rechazadas por los triggers de protección:
+
+```sql
+UPDATE products_audit SET action = 'X' WHERE id = 1;
+DELETE FROM products_audit WHERE id = 1;
+INSERT INTO products_audit (product_id, action, old_data, new_data) VALUES (999,'INSERT',NULL,NULL);
+UPDATE sales_audit SET action = 'X' WHERE id = 1;
+```
+
+![UPDATE sobre products_audit rechazado](consultas/oracle-trg-05-update-products.png)
+
+![DELETE sobre products_audit rechazado](consultas/oracle-trg-06-delete-products.png)
+
+![INSERT directo sobre products_audit rechazado](consultas/oracle-trg-07-insert-products.png)
+
+![UPDATE sobre sales_audit rechazado](consultas/oracle-trg-08-update-sales.png)
+
+**Resultado:** los errores fueron `ORA-20001: products_audit es inmutable: UPDATE/DELETE prohibido.` (para el `UPDATE` y para el `DELETE`), `ORA-20003: INSERT en products_audit solo permitido desde triggers de products.` y `ORA-20001: sales_audit es inmutable: UPDATE/DELETE prohibido.`. Las pruebas de bloqueo se hicieron después de las de registro, porque el trigger actúa por fila: con la tabla de auditoría vacía, un `UPDATE` o `DELETE` no encuentra filas y no se dispara. Al final, `products` y `sales` quedaron con 100 filas cada una.
+
+**Limitación.** La sentencia `TRUNCATE TABLE` es una instrucción de definición de datos y no dispara triggers de fila, así que no queda cubierta por esta protección. Puede ejecutarla el propietario de las tablas o cualquier usuario con el privilegio `DROP ANY TABLE`. Para cerrar ese hueco, las tablas de auditoría deberían pertenecer a un usuario distinto del que opera la aplicación.
