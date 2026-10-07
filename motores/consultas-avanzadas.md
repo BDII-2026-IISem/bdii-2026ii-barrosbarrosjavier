@@ -1718,3 +1718,388 @@ La carga de datos, reutilizando los mismos 10 archivos CSV en los cuatro motores
 3. **Oracle — palabra reservada**: `DATE` es un identificador reservado en Oracle, lo que impidió renombrar la columna `fecha` a `date` sin comillas dobles en `supply_movements`, `sales` y `payments`. Se resolvió forzando el identificador entre comillas (`"date"`), con la consecuencia de que toda consulta posterior sobre esas tres tablas debió referenciar la columna en ese formato exacto.
 
 A pesar de estas diferencias de sintaxis y de los tres incidentes de motor, los resultados obtenidos en las 9 consultas avanzadas fueron idénticos en los cuatro motores — mismas cantidades de filas, mismos totales, mismos productos y ventas identificados en cada caso — confirmando que el modelo de datos y los datos de prueba se mantuvieron consistentes a lo largo de todo el ejercicio, y que las diferencias encontradas fueron exclusivamente de sintaxis y comportamiento de cada motor, no de la lógica de las consultas en sí.
+
+### 1.14 Procedimientos almacenados
+
+Cada consulta de la sección 1.13 se llevó a un procedimiento almacenado (`CREATE PROCEDURE`) para guardarla dentro del motor y ejecutarla con `CALL`. Se crearon 15 procedimientos, uno por cada forma de las 9 consultas, con el nombre `sp_consulta_<número>`.
+
+**Incidente 1 — error 1064 al crear con `BEGIN ... END`.** El primer intento usó `BEGIN ... END` y DBeaver respondió `ERROR 1064 ... near 'END'`. El editor corta la sentencia en el primer `;`, el del `SELECT`, y deja el `END` suelto. Como cada consulta es una sola sentencia, se creó cada procedimiento sin bloque `BEGIN ... END`, y cada `CREATE` queda con un único `;` al final.
+
+**Incidente 2 — columna residual en `products`.** Al ejecutar `sp_consulta_1_6a` aparecía una séptima columna, `id;sku;name;description;price;status`, llena de `NULL`. Era el encabezado del CSV, leído como nombre de columna por una importación con el delimitador mal configurado. Se comprobó que estaba solo en `products` y vacía en las 100 filas, se hizo un respaldo con `mysqldump` y se eliminó:
+
+```sql
+ALTER TABLE products DROP COLUMN `id;sku;name;description;price;status`;
+```
+
+Después `products` quedó con 100 filas y 6 columnas, como en los otros motores. Los procedimientos con `SELECT *` no necesitaron recrearse, porque MySQL resuelve las columnas al ejecutar.
+
+#### 1.14.1 Mostrar algunos de los registros de `products`
+
+**Narrativa:** esta consulta es el punto de partida para comprobar que el catálogo se cargó completo. Proyecta solo `sku`, `name`, `price` y `status`, las columnas que identifican un producto, en vez de traer la tabla entera con `SELECT *`.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_1() SELECT sku, name, price, status FROM products;
+```
+
+![Creación de sp_consulta_1_1](consultas/mysql-sp-1-1-create.png)
+
+```sql
+CALL sp_consulta_1_1();
+```
+
+![Ejecución de sp_consulta_1_1](consultas/mysql-sp-1-1-call.png)
+
+**Resultado:** devolvió 100 productos: 90 activos (`status = 1`) y 10 inactivos (`status = 0`). `CIA-859` aparece a $7.950, el mismo precio de los otros tres motores.
+
+#### 1.14.2 Ventas ordenadas de la más reciente a la más antigua
+
+**Narrativa:** responde "¿qué se vendió últimamente?". Usa `ORDER BY date DESC` sobre `sales`, de modo que la primera fila sea la venta más nueva. Sirve para revisar la actividad reciente de la panadería.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_2() SELECT id, date, subtotal, status FROM sales ORDER BY date DESC;
+```
+
+![Creación de sp_consulta_1_2](consultas/mysql-sp-1-2-create.png)
+
+```sql
+CALL sp_consulta_1_2();
+```
+
+![Ejecución de sp_consulta_1_2](consultas/mysql-sp-1-2-call.png)
+
+**Resultado:** devolvió las 100 ventas. La más reciente es la venta 10 (27 de marzo de 2026, pendiente) y la más antigua la venta 45 (2 de junio de 2025). El rango cubre unos diez meses de operación.
+
+#### 1.14.3 Ventas con sus líneas de detalle, relación en `WHERE`
+
+**Narrativa:** relaciona cada línea de `sale_details` con su venta en `sales`. La unión se hace con la condición `S.id = SD.header_id` en el `WHERE`: la clave primaria de la venta contra la clave foránea de la línea. Muestra qué productos y cantidades componen cada venta.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_3() SELECT * FROM sale_details SD, sales S WHERE S.id = SD.header_id;
+```
+
+![Creación de sp_consulta_1_3](consultas/mysql-sp-1-3-create.png)
+
+```sql
+CALL sp_consulta_1_3();
+```
+
+![Ejecución de sp_consulta_1_3](consultas/mysql-sp-1-3-call.png)
+
+**Resultado:** devolvió 100 filas, una por línea de detalle, cada una con los datos de su venta. Ninguna línea quedó sin venta, lo que confirma la integridad de la clave foránea `header_id`.
+
+#### 1.14.4 Ventas con sus líneas de detalle, relación con `JOIN`
+
+**Narrativa:** es la misma pregunta que la 1.14.3, resuelta con `JOIN ... ON`. Proyecta de `sales` solo la fecha y el estado, y de `sale_details` todas las columnas. Esto separa la condición de unión de los posibles filtros, que se agregan en el `WHERE`.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_4()
+SELECT S.date, S.status, SD.*
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id);
+```
+
+![Creación de sp_consulta_1_4](consultas/mysql-sp-1-4-create.png)
+
+```sql
+CALL sp_consulta_1_4();
+```
+
+![Ejecución de sp_consulta_1_4](consultas/mysql-sp-1-4-call.png)
+
+**Resultado:** devolvió las mismas 100 filas que `sp_consulta_1_3`, lo que confirma que ambas sintaxis son equivalentes para esta relación. En la grilla se ven líneas de ventas pagadas, canceladas y pendientes.
+
+#### 1.14.5 Filtro por estado de la venta
+
+**Narrativa:** estas dos consultas reparten las líneas de detalle según el estado de su venta. El estado se filtra en `sales`, porque `sale_details` no tiene columna `status`. La primera usa la relación en el `WHERE` y mide las ventas pagadas. La segunda usa `JOIN` y aísla las canceladas.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_5a()
+SELECT * FROM sale_details SD, sales S
+WHERE S.id = SD.header_id AND S.status = 'paid';
+```
+
+![Creación de sp_consulta_1_5a](consultas/mysql-sp-1-5a-create.png)
+
+```sql
+CALL sp_consulta_1_5a();
+```
+
+![Ejecución de sp_consulta_1_5a](consultas/mysql-sp-1-5a-call.png)
+
+**Resultado:** 86 de las 100 líneas (86 %) pertenecen a ventas pagadas.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_5b()
+SELECT S.date, S.status, SD.*
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id)
+WHERE S.status = 'cancelled';
+```
+
+![Creación de sp_consulta_1_5b](consultas/mysql-sp-1-5b-create.png)
+
+```sql
+CALL sp_consulta_1_5b();
+```
+
+![Ejecución de sp_consulta_1_5b](consultas/mysql-sp-1-5b-call.png)
+
+**Resultado:** 10 líneas, que corresponden a 4 ventas canceladas (39, 40, 48 y 72). Las 4 líneas restantes de las 100 pertenecen a ventas pendientes.
+
+#### 1.14.6 Filtros con `LIKE`
+
+**Narrativa:** tres búsquedas por patrón de texto. La primera usa `LIKE 'Pan%'` para listar los productos cuyo nombre empieza por "Pan". La segunda construye el patrón con `CONCAT('%','chocolate','%')` para buscar la palabra en cualquier posición de la descripción. La tercera combina el filtro de texto con el estado de la venta, para ver qué productos "Pan" se cancelaron.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_6a() SELECT * FROM products AS P WHERE P.name LIKE 'Pan%';
+```
+
+![Creación de sp_consulta_1_6a](consultas/mysql-sp-1-6a-create.png)
+
+```sql
+CALL sp_consulta_1_6a();
+```
+
+![Ejecución de sp_consulta_1_6a](consultas/mysql-sp-1-6a-call.png)
+
+**Resultado:** 29 productos. El patrón incluye también Panettone y Panque, porque solo exige que el nombre comience por "Pan". Dos de ellos están inactivos: `PAN-600` y `PANDE-936`.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_6b() SELECT * FROM products AS P WHERE P.description LIKE CONCAT('%','chocolate','%');
+```
+
+![Creación de sp_consulta_1_6b](consultas/mysql-sp-1-6b-create.png)
+
+```sql
+CALL sp_consulta_1_6b();
+```
+
+![Ejecución de sp_consulta_1_6b](consultas/mysql-sp-1-6b-call.png)
+
+**Resultado:** un solo producto, `Torta de chocolate Mini clasico` (`TORDE-533`, $24.150), que además está inactivo. Es el único del catálogo cuya descripción menciona el chocolate.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_6c()
+SELECT S.date, S.status, P.name
+FROM sales AS S
+JOIN sale_details AS SD ON (S.id = SD.header_id)
+JOIN products AS P ON (P.id = SD.item_id)
+WHERE S.status = 'cancelled' AND P.name LIKE 'Pan%';
+```
+
+![Creación de sp_consulta_1_6c](consultas/mysql-sp-1-6c-create.png)
+
+```sql
+CALL sp_consulta_1_6c();
+```
+
+![Ejecución de sp_consulta_1_6c](consultas/mysql-sp-1-6c-call.png)
+
+**Resultado:** 4 filas: `Pan de yema Individual gourmet` (17 de marzo de 2026), `Pan de queso Mediano` (28 de enero de 2026 y 6 de octubre de 2025) y `Pan multigrano Grande` (6 de octubre de 2025). De las 10 líneas canceladas, 4 son panes.
+
+#### 1.14.7 Filtro con `BETWEEN` sobre cuatro tablas
+
+**Narrativa:** responde "¿qué productos se vendieron y cómo se pagaron entre el 1 de junio de 2025 y el 30 de marzo de 2026?". Encadena `products`, `sale_details`, `sales` y `payments`. Como `payments.reference_id` apunta a la venta, la unión exige también `reference_type = 'sale'`. `BETWEEN` acota la fecha del pago y `ORDER BY` lo ordena de más antiguo a más reciente.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_7()
+SELECT P.name, P.sku, SD.quantity, SD.total, S.date, PAY.method
+FROM products P
+JOIN sale_details SD ON P.id = SD.item_id
+JOIN sales S ON SD.header_id = S.id
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+ORDER BY PAY.date ASC;
+```
+
+![Creación de sp_consulta_1_7](consultas/mysql-sp-1-7-create.png)
+
+```sql
+CALL sp_consulta_1_7();
+```
+
+![Ejecución de sp_consulta_1_7](consultas/mysql-sp-1-7-call.png)
+
+**Resultado:** 97 filas. Una misma línea de venta se repite cuando la venta tiene varios pagos, por ejemplo el `Pan de leche Mini` pagado en efectivo y con tarjeta. Es el resultado esperado de unir dos relaciones 1:N sobre la misma venta y no una duplicación de datos.
+
+#### 1.14.8 Agrupamiento con `GROUP BY` y `HAVING`
+
+**Narrativa:** tres resúmenes de pagos por venta con `SUM`, `COUNT` y `AVG`. Responden cuánto se pagó por cada venta, cuántos pagos fueron y cuál fue el promedio. Las dos primeras acotan las filas antes de agrupar con `WHERE`: la primera por rango de fechas y la segunda por estado y método de pago. La tercera filtra después de agrupar con `HAVING`, porque la condición depende de la suma ya calculada.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_8a()
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count, AVG(PAY.amount) AS avg_payment
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.date BETWEEN '2025-06-01 00:00:00' AND '2026-03-30 23:59:59'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+![Creación de sp_consulta_1_8a](consultas/mysql-sp-1-8a-create.png)
+
+```sql
+CALL sp_consulta_1_8a();
+```
+
+![Ejecución de sp_consulta_1_8a](consultas/mysql-sp-1-8a-call.png)
+
+**Resultado:** 65 ventas con pagos en el rango. La venta 52 encabeza la lista con $942.692,25 repartidos en 6 pagos, y la última es la venta 39, con $9.206,59 en un solo pago.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_8b()
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+WHERE PAY.status = 'completed' AND PAY.method = 'card'
+GROUP BY S.id, S.date
+ORDER BY total_paid DESC;
+```
+
+![Creación de sp_consulta_1_8b](consultas/mysql-sp-1-8b-create.png)
+
+```sql
+CALL sp_consulta_1_8b();
+```
+
+![Ejecución de sp_consulta_1_8b](consultas/mysql-sp-1-8b-call.png)
+
+**Resultado:** 19 ventas tienen pagos con tarjeta ya completados. De nuevo encabeza la venta 52, con $328.898,26 en 2 pagos, de modo que un poco más de un tercio de lo cobrado en esa venta fue con tarjeta.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_8c()
+SELECT S.id, S.date, SUM(PAY.amount) AS total_paid, COUNT(PAY.id) AS payment_count
+FROM sales S
+JOIN payments PAY ON PAY.reference_id = S.id AND PAY.reference_type = 'sale'
+GROUP BY S.id, S.date
+HAVING SUM(PAY.amount) >= 100000
+ORDER BY total_paid DESC;
+```
+
+![Creación de sp_consulta_1_8c](consultas/mysql-sp-1-8c-create.png)
+
+```sql
+CALL sp_consulta_1_8c();
+```
+
+![Ejecución de sp_consulta_1_8c](consultas/mysql-sp-1-8c-call.png)
+
+**Resultado:** 48 ventas acumulan $100.000 o más en pagos, y la venta 52 vuelve a ser la mayor, con $942.692,25 en 6 pagos. Esta consulta no lleva filtro de fechas, así que considera todos los pagos registrados.
+
+#### 1.14.9 Subconsultas y teoría de conjuntos
+
+**Narrativa:** responde "¿qué productos no se vendieron entre el 1 de junio de 2025 y el 30 de marzo de 2026?". Es una diferencia de conjuntos: todos los productos menos los que aparecen en alguna línea de venta del rango. La primera forma usa `NOT IN` con una subconsulta. La segunda usa `LEFT JOIN` con `WHERE S.id IS NULL`.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_9a()
+SELECT * FROM products AS P
+WHERE P.id NOT IN (
+  SELECT SD.item_id FROM sale_details SD
+  JOIN sales S ON SD.header_id = S.id
+  WHERE S.date BETWEEN '2025-06-01' AND '2026-03-30'
+);
+```
+
+![Creación de sp_consulta_1_9a](consultas/mysql-sp-1-9a-create.png)
+
+```sql
+CALL sp_consulta_1_9a();
+```
+
+![Ejecución de sp_consulta_1_9a](consultas/mysql-sp-1-9a-call.png)
+
+**Resultado:** 36 de los 100 productos no tuvieron ventas en el rango, y los otros 64 sí se vendieron al menos una vez.
+
+```sql
+CREATE PROCEDURE sp_consulta_1_9b()
+SELECT * FROM products AS P
+LEFT JOIN sale_details AS SD ON (P.id = SD.item_id)
+LEFT JOIN sales AS S ON (SD.header_id = S.id AND S.date BETWEEN '2025-06-01' AND '2026-03-30')
+WHERE S.id IS NULL;
+```
+
+![Creación de sp_consulta_1_9b](consultas/mysql-sp-1-9b-create.png)
+
+```sql
+CALL sp_consulta_1_9b();
+```
+
+![Ejecución de sp_consulta_1_9b](consultas/mysql-sp-1-9b-call.png)
+
+**Resultado:** los mismos 36 productos que la forma con `NOT IN`, lo que confirma que ambas expresiones de la diferencia de conjuntos son equivalentes.
+
+### 1.15 Triggers de auditoría
+
+Se crearon las tablas `products_audit` y `sales_audit`, que registran automáticamente cada inserción, actualización o eliminación sobre `products` y `sales`. Se eligieron estas dos tablas porque sus cambios pesan más en el negocio: el precio de un producto y el estado de una venta. Cada fila de auditoría guarda el estado anterior (`old_data`) y el posterior (`new_data`) en formato JSON, con la fecha del cambio.
+
+Cada tabla de auditoría tiene tres triggers de registro (`AFTER INSERT`, `AFTER UPDATE` y `AFTER DELETE` sobre la tabla original) y tres de protección. Estos últimos bloquean cualquier `UPDATE` o `DELETE` sobre la tabla de auditoría y rechazan un `INSERT` directo que no venga de los triggers de registro. Para esto último, cada trigger de registro fija una variable de sesión (`@from_products_trigger` o `@from_sales_trigger`) antes de insertar y la limpia después. En total son 12 triggers.
+
+**Incidente 3 — privilegio `SUPER`.** Al crear los primeros triggers con el usuario `admin`, MySQL respondió `ERROR 1419: You do not have the SUPER privilege and binary logging is enabled`. Con el registro binario activo, MySQL exige ese privilegio, que es de servidor y no de base de datos. Se resolvió entrando como `root` y activando `SET GLOBAL log_bin_trust_function_creators = 1;`.
+
+**Creación por terminal.** Por el mismo motivo del incidente 1, los triggers con `BEGIN ... END` se crearon desde un archivo `.sql` ejecutado con el cliente `mysql` de la VPS, usando `DELIMITER $$`, y no desde DBeaver. Por eso los triggers aparecen con `Definer = root@localhost`.
+
+```bash
+docker exec -i mysql-server mysql -u root -p**** hornoraiz < ~/triggers_mysql.sql
+```
+
+![Ejecución del archivo triggers_mysql.sql en la terminal de la VPS](consultas/mysql-trg-01-terminal.png)
+
+**Verificación en DBeaver.** `SHOW TRIGGERS` lista los 12 triggers: `products_ai`, `products_au`, `products_ad`, `sales_ai`, `sales_au`, `sales_ad` y los seis de protección (`bu_`, `bd_` y `bi_` para cada tabla de auditoría).
+
+```sql
+SHOW TRIGGERS;
+```
+
+![Los 12 triggers creados](consultas/mysql-trg-02-show-triggers.png)
+
+#### Prueba de `products_audit`
+
+Se insertó un producto de prueba (`TEST-001`), se le cambió el precio y se borró. Se usó un producto nuevo para no alterar los datos de las consultas.
+
+```sql
+INSERT INTO products (sku, name, description, price, status) VALUES ('TEST-001','Producto de prueba','Prueba de auditoria',1000.00,1);
+UPDATE products SET price = 1500.00 WHERE sku = 'TEST-001';
+DELETE FROM products WHERE sku = 'TEST-001';
+SELECT id, product_id, action, old_data, new_data FROM products_audit ORDER BY id DESC LIMIT 3;
+```
+
+![Registros de products_audit](consultas/mysql-trg-03-products-audit.png)
+
+**Resultado:** se registraron las tres operaciones sobre el producto 101: el `INSERT` con precio 1000, el `UPDATE` con `old_data` en 1000 y `new_data` en 1500, y el `DELETE` con el estado final (precio 1500). La tabla conserva además filas anteriores de las primeras pruebas, porque su historial no se puede borrar.
+
+#### Prueba de `sales_audit`
+
+```sql
+INSERT INTO sales (client_id, date, subtotal, taxes, total, status) VALUES (NULL, NOW(), 1000.00, 190.00, 1190.00, 'pending');
+SET @sid = LAST_INSERT_ID();
+UPDATE sales SET status = 'paid' WHERE id = @sid;
+DELETE FROM sales WHERE id = @sid;
+SELECT id, sale_id, action, old_data, new_data FROM sales_audit ORDER BY id DESC LIMIT 3;
+```
+
+![Registros de sales_audit](consultas/mysql-trg-04-sales-audit.png)
+
+**Resultado:** para la venta 101 quedaron el `INSERT` en `pending`, el `UPDATE` de `pending` a `paid` y el `DELETE` con el último estado. La auditoría capta el cambio de estado de la venta, que es el dato que más interesa.
+
+#### Pruebas de inmutabilidad
+
+Se intentó alterar las tablas de auditoría. Las cuatro operaciones fueron rechazadas por los triggers de protección, con el error `1644` (`SQLSTATE 45000`):
+
+```sql
+UPDATE products_audit SET action = 'X' WHERE id = 1;
+DELETE FROM products_audit WHERE id = 1;
+INSERT INTO products_audit (product_id, action, old_data, new_data) VALUES (999,'INSERT',NULL,NULL);
+UPDATE sales_audit SET action = 'X' WHERE id = 1;
+```
+
+![UPDATE sobre products_audit rechazado](consultas/mysql-trg-05-update-products.png)
+
+![DELETE sobre products_audit rechazado](consultas/mysql-trg-06-delete-products.png)
+
+![INSERT directo sobre products_audit rechazado](consultas/mysql-trg-07-insert-products.png)
+
+![UPDATE sobre sales_audit rechazado](consultas/mysql-trg-08-update-sales.png)
+
+**Resultado:** los mensajes fueron `products_audit es inmutable: UPDATE prohibido.`, `products_audit es inmutable: DELETE prohibido.`, `INSERT en products_audit solo permitido desde triggers de products.` y `sales_audit es inmutable: UPDATE prohibido.`. Al final, `products` y `sales` quedaron con 100 filas cada una, igual que antes de las pruebas.
+
+**Limitación.** La sentencia `TRUNCATE TABLE` no dispara triggers en MySQL, así que no queda cubierta por esta protección. Para cerrar ese hueco habría que quitarles el privilegio `DROP`/`TRUNCATE` sobre las tablas de auditoría a los usuarios que no sean administradores.
