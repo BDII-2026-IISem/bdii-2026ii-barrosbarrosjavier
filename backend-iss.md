@@ -309,3 +309,162 @@ Los tests de `DatabaseSelectionTests` se escriben en el ISS-03.
 | AC-01-02 | Motor inválido lanza `ImproperlyConfigured` | EVI-01-15 | PASS |
 | AC-01-03 | Variable vacía lanza error | EVI-01-15 | PASS |
 | AC-01-04 | DSN de Oracle contiene `SERVICE_NAME` | EVI-01-15 | PASS |
+
+---
+
+## ISS-02 — Apps catalog, production y sale
+
+### Narrativa
+
+Con la configuración del entorno y de la base de datos preparada, HornoRaíz necesita una estructura que permita organizar las funcionalidades del sistema. Django utiliza aplicaciones (*apps*) para separar la lógica del proyecto en módulos independientes, cada uno enfocado en una parte específica del negocio. En esta unidad se crearon las aplicaciones correspondientes a la gestión de la panadería y se organizaron dentro del paquete `apps/`, evitando que el directorio raíz se llene de carpetas dispersas. En esta etapa no se implementan modelos ni reglas de negocio; el trabajo se centra en establecer la estructura modular y registrar las aplicaciones en la configuración del proyecto.
+
+### Objetivo
+
+Crear las aplicaciones de negocio de HornoRaíz mediante las herramientas de Django, organizarlas dentro del paquete `apps/` y registrarlas en la configuración para facilitar su desarrollo en las siguientes unidades.
+
+### Requisitos
+
+- Haber completado el ISS-01, correspondiente a la configuración del entorno y la selección del motor de base de datos.
+- Tener activo el entorno virtual `(.venv)` en la terminal.
+- Contar con el proyecto Django `config` creado y funcionando.
+- No implementar todavía los modelos de negocio.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-02-01-venv-activo.png)
+
+**2. Crear los directorios y las apps con `startapp`**
+
+`startapp` exige que el directorio destino ya exista. Por eso primero se crean las carpetas y luego se genera cada app.
+
+```bash
+mkdir -p apps/catalog apps/production apps/sale
+
+python manage.py startapp catalog apps/catalog
+python manage.py startapp production apps/production
+python manage.py startapp sale apps/sale
+```
+
+![Apps creadas con startapp](evidencias/EVI-02-02-startapp.png)
+
+**3. Verificar la estructura de las apps**
+
+```bash
+tree apps -I "__pycache__"
+```
+
+![Estructura de las apps](evidencias/EVI-02-03-estructura-apps.png)
+
+**4. Convertir `apps` en paquete**
+
+Se creó `apps/__init__.py`, vacío, para que Python trate la carpeta `apps` como un paquete.
+
+```bash
+cat > apps/__init__.py <<'EOF'
+EOF
+```
+
+![apps/__init__.py creado](evidencias/EVI-02-04-apps-init.png)
+
+**5. Parchear el `apps.py` de cada app**
+
+Como las apps viven dentro de `apps/`, hay que indicarle a Django la ruta completa del paquete. Se mantiene el `label` corto para que las migraciones no arrastren el prefijo `apps.`.
+
+```python
+# apps/catalog/apps.py
+from django.apps import AppConfig
+
+
+class CatalogConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.catalog"
+    label = "catalog"
+```
+
+```python
+# apps/production/apps.py
+from django.apps import AppConfig
+
+
+class ProductionConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.production"
+    label = "production"
+```
+
+```python
+# apps/sale/apps.py
+from django.apps import AppConfig
+
+
+class SaleConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.sale"
+    label = "sale"
+```
+
+![apps.py parcheados](evidencias/EVI-02-05-apps-py.png)
+
+**6. Registrar las apps en `config/settings/__init__.py`**
+
+```python
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "apps.catalog.apps.CatalogConfig",
+    "apps.production.apps.ProductionConfig",
+    "apps.sale.apps.SaleConfig",
+]
+```
+
+![Apps registradas en INSTALLED_APPS](evidencias/EVI-02-06-installed-apps.png)
+
+### Explicación
+
+Django necesita conocer la ruta completa de cada aplicación para poder reconocerla y cargarla correctamente. En HornoRaíz, las aplicaciones se encuentran dentro del directorio `apps/`, por lo que el atributo `AppConfig.name` debe especificar la ruta correspondiente, como `apps.catalog`.
+
+El atributo `label` conserva el nombre corto de cada aplicación, por ejemplo `catalog`, facilitando su identificación dentro del proyecto y evitando introducir el prefijo del paquete en las referencias de las migraciones.
+
+Cada aplicación representa un área funcional de HornoRaíz:
+
+```
+apps/
+├── catalog/     products, supplies, recipes, recipe_supplies, promotions
+├── production/  production_batches, supply_movements
+└── sale/        sales, sale_details, payments
+```
+
+En esta etapa se prepara la estructura de las aplicaciones, sin implementar todavía los modelos de negocio.
+
+### Criterios de aceptación
+
+- **AC-02-01:** verificar que las aplicaciones `catalog`, `production` y `sale` se hayan creado mediante el comando `startapp` de Django.
+- **AC-02-02:** comprobar que `python manage.py check` se ejecute sin errores relacionados con el registro o la configuración de las aplicaciones.
+- **AC-02-03:** confirmar que todavía no se hayan implementado modelos de negocio en esta etapa del desarrollo.
+
+### Verificación
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-02-07-check-ok.png)
+
+### GATE
+
+| **AC**   | **Verificación**               | **Evidencia** | **Resultado** |
+|----------|--------------------------------|---------------|---------------|
+| AC-02-01 | directorios de las apps        | EVI-02-03     | PASS          |
+| AC-02-02 | `manage.py check`              | EVI-02-07     | PASS          |
+| AC-02-03 | este ISS no escribe modelos    | revisión de los `models.py` vacíos | PASS |
