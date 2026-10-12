@@ -468,3 +468,276 @@ python manage.py check
 | AC-02-01 | directorios de las apps        | EVI-02-03     | PASS          |
 | AC-02-02 | `manage.py check`              | EVI-02-07     | PASS          |
 | AC-02-03 | este ISS no escribe modelos    | revisión de los `models.py` vacíos | PASS |
+
+---
+
+## ISS-03 — Custom User antes de la primera migración
+
+### Narrativa
+
+Con la estructura de apps lista, el siguiente paso consiste en definir el modelo de usuario propio del sistema antes de la primera migración. Django trae un usuario por defecto, pero cambiarlo después de migrar obliga a borrar tablas. Por eso, en esta unidad se creó el usuario personalizado de HornoRaíz sobre `django.contrib.auth`, se declaró en la configuración y solo entonces se hizo la primera migración. Así, las credenciales del sistema quedan en una tabla propia (`users`).
+
+### Objetivo
+
+Definir el usuario de HornoRaíz sobre `django.contrib.auth` y fijar `AUTH_USER_MODEL` antes de migrar.
+
+### Requisitos
+
+- ISS-02 superado.
+- Terminal con el entorno virtual `.venv` activo.
+- Decisión explícita entre `AbstractUser` y `AbstractBaseUser`: se eligió `AbstractUser`.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-03-01-venv-activo.png)
+
+**2. Crear el paquete `apps/common` con `RecordStatus`**
+
+El estado "activo / inactivo" lo usarán el usuario y, desde el ISS-04, las tablas del negocio. `apps/common` no es una app: no se registra en `INSTALLED_APPS` ni se crea con `startapp`.
+
+```bash
+mkdir -p apps/common
+cat > apps/common/__init__.py <<'EOF'
+EOF
+cat > apps/common/status.py <<'EOF'
+from django.db import models
+
+
+class RecordStatus(models.TextChoices):
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+EOF
+```
+
+![apps/common creado](evidencias/EVI-03-02-apps-common.png)
+
+**3. Crear la app `security` con la CLI**
+
+```bash
+mkdir -p apps/security
+python manage.py startapp security apps/security
+```
+
+![App security creada](evidencias/EVI-03-03-startapp-security.png)
+
+**4. Parchear `apps/security/apps.py`**
+
+```python
+from django.apps import AppConfig
+
+
+class SecurityConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.security"
+    label = "security"
+```
+
+![apps.py parcheado](evidencias/EVI-03-04-apps-py.png)
+
+**5. Escribir el modelo de usuario**
+
+```python
+from django.contrib.auth.models import AbstractUser, UserManager
+from django.db import models
+
+from apps.common.status import RecordStatus
+
+
+class HornoRaizUserManager(UserManager):
+    def create_user(self, username, email=None, password=None, **extra_fields):
+        extra_fields.setdefault("status", RecordStatus.INACTIVE)
+        return super().create_user(username, email, password, **extra_fields)
+
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        extra_fields.setdefault("status", RecordStatus.ACTIVE)
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        return super().create_superuser(username, email, password, **extra_fields)
+
+
+class User(AbstractUser):
+    email = models.EmailField("correo electrónico", max_length=150, unique=True)
+    status = models.CharField(
+        max_length=8,
+        choices=RecordStatus.choices,
+        default=RecordStatus.INACTIVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = HornoRaizUserManager()
+
+    class Meta:
+        db_table = "users"
+        verbose_name = "usuario"
+        verbose_name_plural = "usuarios"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=RecordStatus.values),
+                name="users_status_valid",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
+        self.is_active = self.status == RecordStatus.ACTIVE
+        super().save(*args, **kwargs)
+```
+
+`create_user` deja `status` en `inactive` si nadie lo indica. `create_superuser` lo fuerza a `active`, para que `save()` no desactive al superusuario.
+
+![models.py del usuario](evidencias/EVI-03-05-models-py.png)
+
+**6. Registrar la app y fijar `AUTH_USER_MODEL`**
+
+En `config/settings/__init__.py`, la app de seguridad va delante de las de negocio.
+
+```python
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "apps.security.apps.SecurityConfig",
+    "apps.catalog.apps.CatalogConfig",
+    "apps.production.apps.ProductionConfig",
+    "apps.sale.apps.SaleConfig",
+]
+```
+
+Y debajo de `DATABASES = database_from_environ(os.environ)`:
+
+```python
+AUTH_USER_MODEL = "security.User"
+```
+
+![AUTH_USER_MODEL configurado](evidencias/EVI-03-06-auth-user-model.png)
+
+**7. Escribir el test de selección del motor**
+
+```python
+from django.core.exceptions import ImproperlyConfigured
+from django.test import SimpleTestCase
+
+from config.database import database_from_environ
+
+
+class DatabaseSelectionTests(SimpleTestCase):
+    def _env(self, engine):
+        return {
+            "DB_ENGINE": engine,
+            "POSTGRES_DB": "hornoraiz",
+            ...
+        }
+
+    def test_postgresql_engine(self):
+        ...
+
+    def test_mysql_engine(self):
+        ...
+
+    def test_mssql_engine(self):
+        ...
+
+    def test_oracle_uses_service_name(self):
+        ...
+
+    def test_invalid_engine(self):
+        ...
+
+    def test_missing_variable(self):
+        ...
+```
+
+![Tests de selección de motor](evidencias/EVI-03-07-tests-py.png)
+
+**8. Generar la migración, migrar y probar**
+
+```bash
+python manage.py makemigrations security
+python manage.py migrate
+python manage.py test apps.security.tests.DatabaseSelectionTests
+```
+
+![makemigrations](evidencias/EVI-03-08-makemigrations.png)
+
+![migrate](evidencias/EVI-03-09-migrate.png)
+
+![Tests PASS](evidencias/EVI-03-10-tests-pass.png)
+
+**9. Probar la conexión a MySQL**
+
+```bash
+python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('Motor:', connection.vendor); print('Base de datos:', connection.settings_dict['NAME']); print('Conexión: OK')"
+```
+
+![Conexión a MySQL](evidencias/EVI-03-11-conexion-mysql.png)
+
+**10. Crear el superusuario**
+
+```bash
+python manage.py createsuperuser
+```
+
+![Superusuario creado](evidencias/EVI-03-12-createsuperuser.png)
+
+**11. Verificar la tabla `users` en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, username, email, status, is_active, is_staff, is_superuser FROM users;"
+```
+
+![Tabla users verificada](evidencias/EVI-03-13-tabla-users.png)
+
+### Explicación
+
+Se prefirió `AbstractUser` sobre `AbstractBaseUser` porque proporciona funcionalidades de autenticación ya implementadas por Django, como el hash de contraseñas, los validadores, los métodos `set_password()` y `check_password()`, y la integración con el panel administrativo.
+
+El campo `status` permite representar el estado funcional de la cuenta, mientras que `is_active` se conserva para mantener la compatibilidad con los mecanismos de autenticación de Django. Para garantizar el comportamiento esperado, ambos campos se mantienen sincronizados desde el método `save()`.
+
+```
+AbstractUser
+    + status
+    + created_at / updated_at
+    + email único
+         │
+         ▼
+AUTH_USER_MODEL = security.User
+```
+
+### Criterios de aceptación
+
+- **AC-03-01:** `AUTH_USER_MODEL` apunta a `security.User`.
+- **AC-03-02:** la tabla `users` se crea en `hornoraiz_django` (no `auth_user`).
+- **AC-03-03:** un usuario con `status = inactive` no puede iniciar sesión.
+- **AC-03-04:** el superusuario se crea con `status = active` y `is_active = 1`.
+
+### Verificación
+
+```bash
+python manage.py test apps.security.tests.DatabaseSelectionTests
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, username, email, status FROM users;"
+```
+
+![Tests PASS](evidencias/EVI-03-10-tests-pass.png)
+
+![Tabla users](evidencias/EVI-03-13-tabla-users.png)
+
+### GATE
+
+| **AC**   | **Verificación**               | **Evidencia** | **Resultado** |
+|----------|--------------------------------|---------------|---------------|
+| AC-03-01 | `AUTH_USER_MODEL` configurado  | EVI-03-06     | PASS          |
+| AC-03-02 | tabla `users` creada en MySQL  | EVI-03-13     | PASS          |
+| AC-03-03 | usuario inactivo no autentica  | EVI-03-07     | PASS          |
+| AC-03-04 | superusuario activo creado     | EVI-03-12     | PASS          |
