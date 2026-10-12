@@ -115,3 +115,197 @@ python manage.py check
 | AC-00-01 | versión de Django              | EVI-00-04     | PASS          |
 | AC-00-02 | archivos del proyecto          | EVI-00-03     | PASS          |
 | AC-00-03 | ausencia de modelos de negocio | EVI-00-06     | PASS          |
+
+---
+
+## ISS-01 — Settings y selección del motor
+
+### Narrativa
+
+Una vez preparada la estructura inicial, el siguiente paso consiste en definir cómo se conectará el backend con la base de datos. Se decidió utilizar un archivo `.env` que permita seleccionar el motor de base de datos mediante variables de entorno, sin modificar la lógica de Python. En esta unidad se establece una configuración flexible y organizada, con la regla de utilizar un solo motor de base de datos por ejecución del proyecto.
+
+### Objetivo
+
+Configurar la selección de un único motor de base de datos para HornoRaíz mediante variables de entorno definidas en `.env`.
+
+### Requisitos
+
+- Haber completado el ISS-00 y tener activo el entorno virtual `(.venv)`.
+- Contar con las variables de configuración necesarias para los 4 motores.
+- Disponer de un archivo `.env` para almacenar los parámetros de configuración.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-01-01-venv-activo.png)
+
+**2. Instalar dependencias del sistema**
+
+`mysqlclient` necesita compilar una extensión en C, por lo que requiere las librerías de desarrollo de MySQL y herramientas de compilación.
+
+```bash
+apt update
+apt install -y build-essential pkg-config default-libmysqlclient-dev python3.12-dev
+```
+
+![Dependencias del sistema](evidencias/EVI-01-02-deps-sistema.png)
+
+**3. Instalar `python-dotenv` y los drivers**
+
+```bash
+python -m pip install "python-dotenv==1.2.3"
+python -m pip install "psycopg[binary]==3.3.6"
+python -m pip install "mysqlclient==2.3.0"
+python -m pip install "mssql-django==2.0.0"
+python -m pip install "oracledb==26.0.1"
+python -m pip freeze > requirements.txt
+```
+
+![Instalación de drivers](evidencias/EVI-01-03-instalacion-drivers.png)
+
+![requirements.txt](evidencias/EVI-01-04-requirements.png)
+
+**4. Convertir `settings.py` en paquete**
+
+```bash
+rm config/settings.py
+mkdir -p config/settings
+```
+
+![settings convertido en paquete](evidencias/EVI-01-05-settings-paquete.png)
+
+**5. Crear `.env.example`**
+
+```bash
+cat > .env.example <<'EOF'
+# Copie este archivo a .env y complete los valores.
+# .env no se versiona.
+
+DJANGO_SECRET_KEY=
+DJANGO_DEBUG=True
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,testserver
+
+# Motor activo. Uno solo por ejecución: postgresql | mysql | mssql | oracle
+DB_ENGINE=mysql
+
+POSTGRES_DB=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
+
+MYSQL_DB=hornoraiz_django
+MYSQL_USER=admin
+MYSQL_PASSWORD=1704
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+
+MSSQL_DB=
+MSSQL_USER=
+MSSQL_PASSWORD=
+MSSQL_HOST=127.0.0.1
+MSSQL_PORT=1433
+
+ORACLE_DB=
+ORACLE_USER=
+ORACLE_PASSWORD=
+ORACLE_HOST=127.0.0.1
+ORACLE_PORT=1521
+ORACLE_SERVICE_NAME=
+
+# Laboratorio académico. En producción liste orígenes explícitos.
+CORS_ALLOW_ALL_ORIGINS=True
+EOF
+cp .env.example .env
+```
+
+![.env.example creado](evidencias/EVI-01-06-env-example.png)
+
+**6. Generar la SECRET_KEY y editar `.env`**
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+Se copió el valor generado en `.env`, en la línea `DJANGO_SECRET_KEY=`.
+
+![.env con MySQL configurado](evidencias/EVI-01-07-env-mysql.png)
+
+**7. Crear `config/database.py`**
+
+Se escribió el traductor entre el entorno y Django. Lee `DB_ENGINE` y devuelve un único `DATABASES["default"]`.
+
+![config/database.py](evidencias/EVI-01-08-database-py.png)
+
+**8. Crear `config/settings/__init__.py`**
+
+Carga el `.env`, exige la `SECRET_KEY` y delega la base de datos a `database.py`.
+
+![config/settings/__init__.py](evidencias/EVI-01-09-settings-init.png)
+
+**9. Crear `config/project_python.py`**
+
+Permite ejecutar `python3 manage.py` sin activar el entorno virtual.
+
+![config/project_python.py](evidencias/EVI-01-10-project-python.png)
+
+**10. Parchear `manage.py`, `config/wsgi.py` y `config/asgi.py`**
+
+Se editaron los tres puntos de entrada para que carguen el `.env` antes de que Django lea la configuración.
+
+![manage.py](evidencias/EVI-01-11-manage-py.png)
+
+![config/wsgi.py](evidencias/EVI-01-12-wsgi-py.png)
+
+![config/asgi.py](evidencias/EVI-01-13-asgi-py.png)
+
+### Explicación
+
+- **Intérprete de Python:** `use_project_python()` permite ejecutar `python3 manage.py runserver` sin activar el entorno.
+- **Carga de variables de entorno:** `load_dotenv()` carga las variables definidas en `.env`, respetando las existentes.
+- **Configuración única de la base de datos:** Django utiliza exclusivamente `DATABASES["default"]`.
+- **Conexión a Oracle:** el DSN se construye con `SERVICE_NAME`, con `PORT` vacío.
+- **Conexión a SQL Server:** el valor `mssql` se establece en `ENGINE`, según `mssql-django`.
+- **Configuración regional:** `LANGUAGE_CODE = "es"`, `TIME_ZONE = "America/Bogota"`, `USE_TZ = True`.
+
+El proceso sigue esta secuencia:
+
+```
+.env → DB_ENGINE → database_from_environ → DATABASES["default"] → ORM
+```
+
+### Criterios de aceptación
+
+- **AC-01-01:** los motores `postgresql`, `mysql`, `mssql` y `oracle` generan el `ENGINE` correspondiente.
+- **AC-01-02:** un motor no reconocido produce `ImproperlyConfigured`.
+- **AC-01-03:** la ausencia de una variable obligatoria lanza error antes de conectar.
+- **AC-01-04:** el DSN de Oracle incluye `SERVICE_NAME`.
+
+### Verificación
+
+```bash
+python -m django --version
+python manage.py check
+python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('Motor:', connection.vendor); print('Base de datos:', connection.settings_dict['NAME']); print('Conexión: OK')"
+```
+
+![Check exitoso](evidencias/EVI-01-14-check-ok.png)
+
+![Conexión a MySQL](evidencias/EVI-01-15-conexion-mysql.png)
+
+Los tests de `DatabaseSelectionTests` se escriben en el ISS-03.
+
+### GATE
+
+| **AC**   | **Verificación**               | **Evidencia** | **Resultado** |
+|----------|--------------------------------|---------------|---------------|
+| AC-01-01 | Los 4 motores generan el ENGINE correcto | EVI-01-15 | PASS |
+| AC-01-02 | Motor inválido lanza `ImproperlyConfigured` | EVI-01-15 | PASS |
+| AC-01-03 | Variable vacía lanza error | EVI-01-15 | PASS |
+| AC-01-04 | DSN de Oracle contiene `SERVICE_NAME` | EVI-01-15 | PASS |
