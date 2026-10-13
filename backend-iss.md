@@ -3615,3 +3615,277 @@ curl -X POST http://127.0.0.1:8000/api/sale/sales/ -H "Content-Type: application
 | AC-11-03 | items vacío = 400                      | EVI-11-08     | PASS          |
 | AC-11-04 | producto inactivo = 400                | EVI-11-08     | PASS          |
 | AC-11-05 | producto inexistente = 400             | EVI-11-08     | PASS          |
+
+---
+
+## ISS-12 — Consulta y anulación de ventas
+
+### Narrativa
+
+Con el registro de ventas funcionando desde el ISS-11, el siguiente paso consiste en exponer la lectura de las ventas (listado y detalle) y la anulación lógica. La lectura se implementa con un `SaleReadViewSet` que mezcla `ListModelMixin`, `RetrieveModelMixin` y `DestroyModelMixin` sobre un `GenericViewSet`. No incluye `update` ni `create`: los totales no se editan por CRUD y el alta ya tiene su `APIView`. La anulación no borra la fila (el registro debe permanecer para el histórico); en su lugar cambia el `status` a `"cancelled"` mediante el método `void()`, que es idempotente.
+
+### Objetivo
+
+Exponer la lectura de una venta con sus líneas y permitir su anulación lógica sin borrar el histórico.
+
+### Requisitos
+
+- ISS-11 superado.
+- Terminal con el entorno virtual `.venv` activo.
+- Modelo `Sale` con `void()` implementado.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-12-01-venv-activo.png)
+
+**2. Agregar `void()` al modelo `Sale`**
+
+El método `void()` cambia el `status` a `"cancelled"` dentro de una transacción. Es idempotente: si la venta ya está cancelada, no hace nada.
+
+```python
+from django.db import models, transaction
+
+
+class Sale(models.Model):
+    # ... campos ...
+
+    def __str__(self):
+        return f"Venta {self.pk}"
+
+    def void(self):
+        """Anula la venta sin borrarla. Idempotente."""
+        with transaction.atomic():
+            sale = Sale.objects.select_for_update().get(pk=self.pk)
+            if sale.status == "cancelled":
+                return sale
+            sale.status = "cancelled"
+            sale.save(update_fields=["status"])
+            return sale
+```
+
+![apps/sale/models.py con void()](evidencias/EVI-12-02-sale-models.png)
+
+**3. Actualizar `apps/sale/views.py`**
+
+Se agregó `SaleReadViewSet` (con `ListModelMixin`, `RetrieveModelMixin`, `DestroyModelMixin`) y el método `get()` a `SaleCollectionAPIView` para reutilizar el listado sobre el mismo path.
+
+```python
+from rest_framework.mixins import (
+    DestroyModelMixin, ListModelMixin, RetrieveModelMixin,
+)
+from rest_framework.viewsets import GenericViewSet
+
+
+class SaleReadViewSet(
+    ListModelMixin, RetrieveModelMixin, DestroyModelMixin, GenericViewSet,
+):
+    permission_classes = [AllowAny]
+    serializer_class = SaleSerializer
+    lookup_value_converter = "int"
+
+    def get_queryset(self):
+        return (
+            Sale.objects.prefetch_related("details__product")
+            .order_by("-date", "-id")
+        )
+
+    def perform_destroy(self, instance):
+        instance.void()
+
+
+class SaleCollectionAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        # ... reenvía a SaleRegisterAPIView ...
+
+    def get(self, request, *args, **kwargs):
+        handler = SaleReadViewSet()
+        handler.request = request
+        handler.action = "list"
+        handler.action_map = {"get": "list"}
+        return handler.list(request, *args, **kwargs)
+```
+
+![apps/sale/views.py](evidencias/EVI-12-03-views-py.png)
+
+**4. Actualizar `apps/sale/urls.py`**
+
+Se agregó la ruta del detalle con `SaleReadViewSet.as_view({"get": "retrieve", "delete": "destroy"})`. No se enlazan PUT, PATCH ni POST: el router lo habría hecho automáticamente, pero aquí se fijan solo los métodos permitidos.
+
+```python
+from django.urls import path
+
+from apps.sale.views import SaleCollectionAPIView, SaleReadViewSet
+
+urlpatterns = [
+    path("sales/", SaleCollectionAPIView.as_view(), name="sale-collection"),
+    path(
+        "sales/<int:pk>/",
+        SaleReadViewSet.as_view({"get": "retrieve", "delete": "destroy"}),
+        name="sale-detail",
+    ),
+]
+```
+
+![apps/sale/urls.py](evidencias/EVI-12-04-urls-py.png)
+
+**5. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-12-05-check-ok.png)
+
+**6. Agregar los tests**
+
+Se agregaron 4 tests al final de `apps/sale/tests.py` para cubrir el listado, el detalle, la anulación idempotente y la conservación de las líneas.
+
+```python
+class SaleReadAndVoidTests(APITestCase):
+    def setUp(self):
+        self.water = Product.objects.create(
+            sku="WAT-002", name="Agua 2", price=Decimal("10.00"), status=True,
+        )
+
+    def _register_sale(self, quantity=1):
+        response = self.client.post(
+            "/api/sale/sales/",
+            {
+                "clientId": None,
+                "saleDate": timezone.now().isoformat(),
+                "taxes": "0.00",
+                "items": [{"productId": self.water.id, "quantity": quantity}],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        return response.data["id"]
+
+    def test_list_returns_the_registered_sale(self):
+        ...
+
+    def test_detail_keeps_historical_price(self):
+        ...
+
+    def test_void_cancels_sale_and_is_idempotent(self):
+        ...
+
+    def test_void_does_not_delete_sale_details(self):
+        ...
+```
+
+![apps/sale/tests.py](evidencias/EVI-12-06-tests-py.png)
+
+**7. Ejecutar los tests**
+
+```bash
+python manage.py test apps.sale
+```
+
+Resultado:
+```
+Found 9 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+.........
+----------------------------------------------------------------------
+Ran 9 tests in 0.554s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+![Tests PASS](evidencias/EVI-12-07-tests-pass.png)
+
+**8. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+# Listar ventas
+curl -s http://127.0.0.1:8000/api/sale/sales/ | head -c 500
+
+# Detalle
+curl -s http://127.0.0.1:8000/api/sale/sales/2/ | head -c 500
+
+# Anular (204)
+curl -s -X DELETE -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8000/api/sale/sales/2/
+
+# Verificar que sigue en la lista con status cancelled
+curl -s http://127.0.0.1:8000/api/sale/sales/2/ | head -c 500
+```
+
+Resultado (fragmento):
+```json
+// Antes del DELETE
+{"id":2,"clientId":null,"date":"...","subtotal":"3000.00","taxes":"0.00",
+ "total":"3000.00","status":"paid","details":[...]}
+
+HTTP 204
+
+// Después del DELETE
+{"id":2,"clientId":null,"date":"...","subtotal":"3000.00","taxes":"0.00",
+ "total":"3000.00","status":"cancelled","details":[...]}
+```
+
+La fila sigue existiendo con `status = "cancelled"` y los `details` intactos.
+
+![Prueba con curl](evidencias/EVI-12-08-curl.png)
+
+### Explicación
+
+Un `ModelViewSet` incluiría `create` y `update`, que aquí no tienen sentido: el alta ya tiene su `APIView` en el ISS-11 y los totales no se editan por CRUD. En su lugar, `SaleReadViewSet` mezcla solo los mixins necesarios: `ListModelMixin`, `RetrieveModelMixin` y `DestroyModelMixin`.
+
+La anulación no es `QuerySet.delete()`. La fila debe permanecer para que el histórico demuestre que la venta existió. `void()` cambia el `status` a `"cancelled"`. Si se llama dos veces, la segunda no hace nada porque ya está en `"cancelled"`. Las líneas `SaleDetail` tampoco se borran.
+
+```
+GET    /api/sale/sales/         → list
+GET    /api/sale/sales/<pk>/    → retrieve (con details dentro)
+DELETE /api/sale/sales/<pk>/    → Sale.void() → status = "cancelled"
+```
+
+**Nota sobre la adaptación a HornoRaíz:** sin `stock` en `Product`, la anulación solo cambia el estado de la venta; no hay reposición de inventario. El `status` es `"cancelled"` (texto), coherente con el esquema original (`paid`, `pending`, `cancelled`).
+
+### Criterios de aceptación
+
+- **AC-12-01:** el GET del detalle incluye las líneas y el `unit_price` guardado.
+- **AC-12-02:** el DELETE responde 204.
+- **AC-12-03:** la fila `sales` sigue existiendo con `status = "cancelled"`.
+- **AC-12-04:** una segunda anulación es idempotente: no cambia nada.
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py test apps.sale
+curl -s http://127.0.0.1:8000/api/sale/sales/2/
+```
+
+![Check exitoso](evidencias/EVI-12-05-check-ok.png)
+
+![Tests PASS](evidencias/EVI-12-07-tests-pass.png)
+
+![Prueba con curl](evidencias/EVI-12-08-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                              | **Evidencia** | **Resultado** |
+|----------|-----------------------------------------------|---------------|---------------|
+| AC-12-01 | GET del detalle con líneas y `unit_price`     | EVI-12-07     | PASS          |
+| AC-12-02 | DELETE responde 204                           | EVI-12-07     | PASS          |
+| AC-12-03 | la fila `sales` sigue con `status=cancelled`  | EVI-12-07     | PASS          |
+| AC-12-04 | anulación idempotente                         | EVI-12-07     | PASS          |
