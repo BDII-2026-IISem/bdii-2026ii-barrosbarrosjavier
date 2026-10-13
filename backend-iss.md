@@ -1,6 +1,6 @@
 # Informe de ISS — HornoRaíz Backend (Django + DRF)
 
-**Estudiante:** Jaime Rafael Gonzalez Ballesta
+**Estudiante:** Javier Rafael Barros Barros
 **Programa:** Ingeniería de Sistemas — Universidad de La Guajira
 **Proyecto:** HornoRaíz — Producción y venta de panadería
 **Repositorio:** bdii-2026ii-barrosbarrosjavier
@@ -2841,3 +2841,777 @@ curl http://127.0.0.1:8000/api/catalog/supplies/ | head -c 300
 | AC-09-01 | los 10 endpoints responden 200                      | EVI-09-11     | PASS          |
 | AC-09-02 | POST válido en cada recurso responde 201            | EVI-09-10     | PASS          |
 | AC-09-03 | campos derivados en camelCase                       | EVI-09-10     | PASS          |
+
+---
+
+## ISS-10 — Endpoint de productos disponibles con ListAPIView
+
+### Narrativa
+
+Con el CRUD completo del catálogo publicado en el ISS-09, el siguiente paso consiste en exponer una lectura filtrada que no forma parte del CRUD genérico: la lista de productos activos. Mientras el `ProductViewSet` devuelve todos los productos (activos e inactivos), la vista de "disponibles" solo muestra los que tienen `status = True`. Esta lectura no justifica un `ModelViewSet` (tendría que apagar POST, PUT y DELETE); tampoco una `APIView` pura (reescribiría el ciclo que el mixin ya resuelve). Se usa `ListAPIView`, que combina `GenericAPIView` con `ListModelMixin` y deja el filtro en `get_queryset`.
+
+### Objetivo
+
+Publicar una lectura filtrada del catálogo de productos que devuelva solo los activos, sin duplicar el CRUD existente.
+
+### Requisitos
+
+- ISS-09 superado: CRUD del catálogo publicado.
+- Terminal con el entorno virtual `.venv` activo.
+- `ProductSerializer` disponible en `apps/catalog/serializers.py`.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-10-01-venv-activo.png)
+
+**2. Agregar `AvailableProductListAPIView` a `apps/catalog/views.py`**
+
+Se agregó al final del archivo de vistas y se añadió el import de `ListAPIView`. No se reescribió el CRUD.
+
+```python
+from rest_framework import viewsets
+from rest_framework.generics import ListAPIView
+from rest_framework.permissions import AllowAny
+
+
+# ... los 5 ViewSets del catálogo ya existían ...
+
+
+class AvailableProductListAPIView(ListAPIView):
+    """Lista solo los productos activos (status=True)."""
+
+    permission_classes = [AllowAny]
+    serializer_class = ProductSerializer
+
+    def get_queryset(self):
+        return Product.objects.filter(status=True)
+```
+
+![apps/catalog/views.py](evidencias/EVI-10-02-catalog-views.png)
+
+**3. Registrar la ruta en `apps/catalog/urls.py`**
+
+La ruta `products/available/` se registra **antes** de `router.urls` para que Django la evalúe primero.
+
+```python
+from django.urls import path
+from rest_framework.routers import SimpleRouter
+
+from apps.catalog.views import (
+    ProductViewSet, SupplyViewSet, RecipeViewSet,
+    RecipeSupplyViewSet, PromotionViewSet,
+    AvailableProductListAPIView,
+)
+
+router = SimpleRouter(use_regex_path=False)
+router.register("products", ProductViewSet, basename="product")
+router.register("supplies", SupplyViewSet, basename="supply")
+router.register("recipes", RecipeViewSet, basename="recipe")
+router.register("recipe-supplies", RecipeSupplyViewSet, basename="recipe-supply")
+router.register("promotions", PromotionViewSet, basename="promotion")
+
+urlpatterns = [
+    path(
+        "products/available/",
+        AvailableProductListAPIView.as_view(),
+        name="product-available",
+    ),
+]
+urlpatterns += router.urls
+```
+
+![apps/catalog/urls.py](evidencias/EVI-10-03-catalog-urls.png)
+
+**4. Escribir el test**
+
+`apps/catalog/tests.py` con el test de la lista de disponibles.
+
+```python
+class AvailableProductApiTests(APITestCase):
+    def test_available_filter(self):
+        self.client.post(
+            "/api/catalog/products/",
+            {"sku": "AV-001", "name": "Pan activo",
+             "description": "Disponible", "price": "1000.00"},
+            format="json",
+        )
+        inactive = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "AV-002", "name": "Pan inactivo",
+             "description": "No disponible", "price": "2000.00"},
+            format="json",
+        )
+        pk = inactive.data["id"]
+        self.client.delete(f"/api/catalog/products/{pk}/")
+
+        available = self.client.get("/api/catalog/products/available/")
+        self.assertEqual(available.status_code, 200)
+        self.assertEqual(len(available.data), 1)
+        self.assertEqual(available.data[0]["sku"], "AV-001")
+
+        stored = Product.objects.get(pk=pk)
+        self.assertEqual(stored.status, False)
+
+        all_products = self.client.get("/api/catalog/products/")
+        self.assertGreaterEqual(len(all_products.data), 2)
+```
+
+![apps/catalog/tests.py](evidencias/EVI-10-04-catalog-tests.png)
+
+**5. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-10-05-check-ok.png)
+
+**6. Ejecutar el test específico**
+
+```bash
+python manage.py test apps.catalog.tests.AvailableProductApiTests
+```
+
+Resultado:
+```
+Found 1 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.069s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+![Test PASS](evidencias/EVI-10-06-test-pass.png)
+
+**7. Ejecutar todos los tests del catálogo**
+
+```bash
+python manage.py test apps.catalog
+```
+
+Resultado:
+```
+Found 5 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.280s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+![Todos los tests PASS](evidencias/EVI-10-07-tests-catalog.png)
+
+**8. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+echo "=== Productos disponibles (solo activos) ==="
+curl -s http://127.0.0.1:8000/api/catalog/products/available/ | head -c 500
+echo ""
+echo "=== Todos los productos ==="
+curl -s http://127.0.0.1:8000/api/catalog/products/ | head -c 500
+```
+
+Resultados:
+```json
+// /available/ → solo productos activos
+[{"id":1,"sku":"TEST-001","name":"Pan de prueba","description":null,"price":"1000.00","status":true},
+ {"id":3,"sku":"TEST-002",...},
+ ...]
+
+// /products/ → todos
+[{"id":1,"sku":"TEST-001",...}, {"id":3,"sku":"TEST-002",...}, ...]
+```
+
+![Prueba con curl](evidencias/EVI-10-08-curl.png)
+
+### Explicación
+
+`ListAPIView` es `GenericAPIView` más `ListModelMixin`. Automatiza la serialización de un queryset y deja el filtro en `get_queryset`. No ofrece POST, PUT ni DELETE. Un `ModelViewSet` obligaría a apagar esos métodos; una `APIView` reescribiría el ciclo que el mixin ya resuelve.
+
+```
+GET /api/catalog/products/available/
+        │
+        ▼
+  AvailableProductListAPIView
+        │
+        ▼
+  Product.objects.filter(status=True)
+```
+
+**Nota sobre orden de rutas:** la ruta literal `products/available/` se registra **antes** que `router.urls`. Django prueba las URLs en orden y se queda con la primera coincidencia. Como `lookup_value_converter = "int"` en el ViewSet, la cadena `available` no entra en `<int:pk>`, pero la ruta literal va primero para dejar explícito que `available` es una colección distinta y no un `id`.
+
+### Criterios de aceptación
+
+- **AC-10-01:** un producto activo aparece en `/products/available/`.
+- **AC-10-02:** al desactivar un producto, desaparece de esta lista pero sigue en la tabla `products`.
+
+### Verificación
+
+```bash
+python manage.py test apps.catalog.tests.AvailableProductApiTests
+curl -s http://127.0.0.1:8000/api/catalog/products/available/
+```
+
+![Test PASS](evidencias/EVI-10-06-test-pass.png)
+
+![Todos los tests PASS](evidencias/EVI-10-07-tests-catalog.png)
+
+![Prueba con curl](evidencias/EVI-10-08-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                                    | **Evidencia** | **Resultado** |
+|----------|-----------------------------------------------------|---------------|---------------|
+| AC-10-01 | producto activo aparece en la lista                 | EVI-10-06     | PASS          |
+| AC-10-02 | producto inactivo desaparece pero sigue en la tabla | EVI-10-06     | PASS          |
+
+---
+
+## ISS-11 — Registro de venta con APIView
+
+### Narrativa
+
+Con los endpoints CRUD del catálogo, producción y ventas publicados, el siguiente paso consiste en implementar el registro de una venta como una sola transacción: crear la cabecera `Sale`, crear las líneas `SaleDetail` con el precio histórico del producto, y calcular el `subtotal`, los `taxes` y el `total`. Si cualquier paso falla (producto inexistente, producto inactivo, impuestos negativos, cantidad inválida), la transacción se revierte y no queda ningún registro. La operación se implementa en un método `register()` dentro de un `QuerySet` personalizado, invocado desde un `SaleRegisterSerializer`. La vista `SaleRegisterAPIView` solo valida y responde 201.
+
+### Objetivo
+
+Registrar una venta como una sola transacción atómica que crea la cabecera y las líneas con el precio histórico, sin dejar registros parciales si algo falla.
+
+### Requisitos
+
+- ISS-10 superado.
+- Terminal con el entorno virtual `.venv` activo.
+- Modelos `Sale` y `SaleDetail` implementados (ISS-06).
+- Modelo `Product` con `status` booleano.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-11-01-venv-activo.png)
+
+**2. Reescribir `apps/sale/managers.py`**
+
+`SaleQuerySet.register()` agrupa la operación completa dentro de `transaction.atomic()`. Bloquea los productos con `select_for_update()` para evitar condiciones de carrera, valida que existan y estén activos, crea la `Sale` y las líneas con `unit_price = product.price`, y calcula los totales.
+
+```python
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
+
+from apps.catalog.models import Product
+
+
+class SaleQuerySet(models.QuerySet):
+    def register(self, *, client_id, sale_date, items, taxes):
+        """Registra una venta con sus líneas dentro de una sola transacción.
+
+        - Crea la cabecera Sale.
+        - Crea las líneas SaleDetail con el precio histórico.
+        - Recalcula subtotal, taxes y total.
+        - Si cualquier paso falla, no queda ningún registro.
+        """
+        if not items:
+            raise ValidationError({"items": ["La venta requiere al menos un producto."]})
+
+        taxes = Decimal(taxes).quantize(Decimal("0.01"))
+        if taxes < 0:
+            raise ValidationError({"taxes": ["Los impuestos no pueden ser negativos."]})
+
+        quantities = {}
+        for item in items:
+            quantity = int(item["quantity"])
+            if quantity < 1:
+                raise ValidationError({"items": ["La cantidad debe ser al menos 1."]})
+            product_id = item["product_id"]
+            quantities[product_id] = quantities.get(product_id, 0) + quantity
+
+        with transaction.atomic():
+            locked_products = {
+                product.id: product
+                for product in Product.objects.select_for_update()
+                .filter(pk__in=quantities)
+                .order_by("id")
+            }
+            if len(locked_products) != len(quantities):
+                raise ValidationError({"items": ["Hay productos que no existen."]})
+
+            for product_id in quantities:
+                product = locked_products[product_id]
+                if not product.status:
+                    raise ValidationError(
+                        {"items": [f"El producto {product.name} no está activo."]}
+                    )
+
+            sale = self.model(
+                client_id=client_id,
+                date=sale_date,
+                subtotal=Decimal("0.00"),
+                taxes=taxes,
+                total=Decimal("0.00"),
+                status="paid",
+            )
+            sale.save()
+
+            subtotal = Decimal("0.00")
+            for item in items:
+                product = locked_products[item["product_id"]]
+                unit_price = product.price
+                quantity = int(item["quantity"])
+                line_total = (unit_price * quantity).quantize(Decimal("0.01"))
+                sale.details.create(
+                    product=product,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    total=line_total,
+                )
+                subtotal += line_total
+
+            subtotal = subtotal.quantize(Decimal("0.01"))
+            total = (subtotal + taxes).quantize(Decimal("0.01"))
+            sale.subtotal = subtotal
+            sale.total = total
+            sale.save(update_fields=["subtotal", "taxes", "total"])
+
+            return sale
+
+
+class SaleManager(models.Manager.from_queryset(SaleQuerySet)):
+    pass
+```
+
+![apps/sale/managers.py](evidencias/EVI-11-02-managers-py.png)
+
+**3. Reescribir `apps/sale/serializers.py`**
+
+Se reescribió el archivo para incluir `SaleItemSerializer` y `SaleRegisterSerializer` junto a los serializers de lectura del ISS-07.
+
+```python
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework import serializers
+
+from apps.catalog.models import Product
+from apps.sale.models import Sale, SaleDetail, Payment
+
+
+class SaleDetailSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+
+    class Meta:
+        model = SaleDetail
+        fields = [
+            "id",
+            "sale",
+            "product",
+            "product_name",
+            "quantity",
+            "unit_price",
+            "total",
+            "notes",
+        ]
+        read_only_fields = ["id", "product_name", "total"]
+        extra_kwargs = {
+            "notes": {"required": False, "allow_null": True, "allow_blank": True},
+        }
+
+    def validate_notes(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        return value
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "reference_type",
+            "reference_id",
+            "method",
+            "amount",
+            "date",
+            "status",
+        ]
+        read_only_fields = ["id"]
+        extra_kwargs = {
+            "reference_type": {"max_length": 50},
+            "method": {"max_length": 50},
+            "status": {"max_length": 30},
+        }
+
+
+class SaleSerializer(serializers.ModelSerializer):
+    details = SaleDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Sale
+        fields = [
+            "id",
+            "client_id",
+            "date",
+            "subtotal",
+            "taxes",
+            "total",
+            "status",
+            "details",
+        ]
+        read_only_fields = ["id", "details"]
+        extra_kwargs = {
+            "client_id": {"required": False, "allow_null": True},
+        }
+
+
+class SaleItemSerializer(serializers.Serializer):
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(),
+        source="product",
+    )
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class SaleRegisterSerializer(serializers.Serializer):
+    client_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    sale_date = serializers.DateTimeField()
+    taxes = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        default=Decimal("0.00"),
+    )
+    items = SaleItemSerializer(many=True, allow_empty=False)
+
+    def create(self, validated_data):
+        items = [
+            {"product_id": item["product"].id, "quantity": item["quantity"]}
+            for item in validated_data["items"]
+        ]
+        try:
+            return Sale.objects.register(
+                client_id=validated_data.get("client_id"),
+                sale_date=validated_data["sale_date"],
+                taxes=validated_data["taxes"],
+                items=items,
+            )
+        except DjangoValidationError as exc:
+            if getattr(exc, "message_dict", None):
+                raise serializers.ValidationError(exc.message_dict) from exc
+            raise serializers.ValidationError(exc.messages) from exc
+```
+
+![apps/sale/serializers.py](evidencias/EVI-11-03-serializers-py.png)
+
+**4. Reescribir `apps/sale/views.py`**
+
+```python
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.sale.models import Sale
+from apps.sale.serializers import SaleRegisterSerializer, SaleSerializer
+
+
+class SaleRegisterAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = SaleRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sale = serializer.save()
+        sale = Sale.objects.prefetch_related("details__product").get(pk=sale.pk)
+        return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)
+
+
+class SaleCollectionAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        handler = SaleRegisterAPIView()
+        handler.request = request
+        handler.format_kwarg = None
+        handler.args = ()
+        handler.kwargs = {}
+        return handler.post(request)
+```
+
+![apps/sale/views.py](evidencias/EVI-11-04-views-py.png)
+
+**5. Reescribir `apps/sale/urls.py`**
+
+```python
+from django.urls import path
+
+from apps.sale.views import SaleCollectionAPIView
+
+urlpatterns = [
+    path("sales/", SaleCollectionAPIView.as_view(), name="sale-collection"),
+]
+```
+
+![apps/sale/urls.py](evidencias/EVI-11-05-urls-py.png)
+
+**6. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-11-06-check-ok.png)
+
+**7. Escribir los tests**
+
+`apps/sale/tests.py` con 5 tests que cubren el registro, el precio histórico y los rechazos.
+
+```python
+import json
+from decimal import Decimal
+
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from apps.catalog.models import Product
+from apps.sale.models import Sale, SaleDetail
+
+
+class SaleTransactionTests(APITestCase):
+    def setUp(self):
+        self.water = Product.objects.create(
+            sku="WAT-001", name="Agua", price=Decimal("10.00"), status=True,
+        )
+        self.bread = Product.objects.create(
+            sku="BRE-001", name="Pan", price=Decimal("4.50"), status=True,
+        )
+
+    def _payload(self, items, taxes="0.00"):
+        return {
+            "clientId": None,
+            "saleDate": timezone.now().isoformat(),
+            "taxes": taxes,
+            "items": items,
+        }
+
+    def test_register_snapshots_price_and_totals(self):
+        response = self.client.post(
+            "/api/sale/sales/",
+            self._payload([
+                {"productId": self.water.id, "quantity": 2},
+                {"productId": self.bread.id, "quantity": 1},
+            ]),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        # response.data usa snake_case (nombres internos)
+        self.assertEqual(response.data["subtotal"], "24.50")
+        self.assertEqual(response.data["taxes"], "0.00")
+        self.assertEqual(response.data["total"], "24.50")
+        self.assertEqual(response.data["status"], "paid")
+
+        # json.loads(response.content) aplica camelCase (renderizado HTTP)
+        wire = json.loads(response.content)
+        self.assertIn("clientId", wire)
+        self.assertIn("date", wire)
+        self.assertNotIn("client_id", wire)
+
+        water_line = next(
+            line for line in wire["details"]
+            if line["product"] == self.water.id
+        )
+        self.assertEqual(water_line["unitPrice"], "10.00")
+        self.assertEqual(water_line["total"], "20.00")
+
+    def test_price_change_doesnt_affect_existing_sale(self):
+        response = self.client.post(
+            "/api/sale/sales/",
+            self._payload([{"productId": self.water.id, "quantity": 1}]),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        sale_id = response.data["id"]
+
+        self.water.refresh_from_db()
+        self.water.price = Decimal("99.00")
+        self.water.save()
+
+        sale = Sale.objects.get(pk=sale_id)
+        detail = sale.details.first()
+        self.assertEqual(detail.unit_price, Decimal("10.00"))
+        self.assertEqual(sale.total, Decimal("10.00"))
+
+    def test_empty_items_is_rejected(self):
+        response = self.client.post(
+            "/api/sale/sales/",
+            self._payload([]),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Sale.objects.count(), 0)
+
+    def test_inactive_product_is_rejected(self):
+        self.water.status = False
+        self.water.save()
+        response = self.client.post(
+            "/api/sale/sales/",
+            self._payload([{"productId": self.water.id, "quantity": 1}]),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Sale.objects.count(), 0)
+
+    def test_nonexistent_product_is_rejected(self):
+        response = self.client.post(
+            "/api/sale/sales/",
+            self._payload([{"productId": 999999, "quantity": 1}]),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Sale.objects.count(), 0)
+```
+
+![apps/sale/tests.py](evidencias/EVI-11-07-tests-py.png)
+
+**8. Ejecutar los tests**
+
+```bash
+python manage.py test apps.sale
+```
+
+Resultado:
+```
+Found 5 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.351s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+![Tests PASS](evidencias/EVI-11-08-tests-pass.png)
+
+**9. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/api/sale/sales/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "saleDate": "2026-10-13T10:00:00Z",
+    "taxes": "0.00",
+    "items": [
+      {"productId": 1, "quantity": 2},
+      {"productId": 3, "quantity": 1}
+    ]
+  }'
+```
+
+Resultado:
+```json
+{"id":2,"clientId":null,"date":"2026-10-13T05:00:00-05:00",
+ "subtotal":"3000.00","taxes":"0.00","total":"3000.00","status":"paid",
+ "details":[
+   {"id":2,"sale":2,"product":1,"productName":"Pan de prueba",
+    "quantity":"2.00","unitPrice":"1000.00","total":"2000.00","notes":null},
+   {"id":3,"sale":2,"product":3,"productName":"Pan de prueba 3",
+    "quantity":"1.00","unitPrice":"1000.00","total":"1000.00","notes":null}
+ ]}
+```
+
+![Prueba con curl](evidencias/EVI-11-09-curl.png)
+
+### Explicación
+
+Un `ModelViewSet.create` guardaría la cabecera y dejaría las líneas a otra petición; eso no es atómico. La `APIView` existe porque el comportamiento es particular: varias filas en una sola operación con reglas de validación propias.
+
+El serializer sigue siendo el lugar de la validación de forma. El manager es el lugar de la invariante, para que también se cumpla si otra vista llama `Sale.objects.register`.
+
+```
+POST /api/sale/sales/
+      │
+      ▼
+SaleCollectionAPIView
+      │
+      ▼
+SaleRegisterAPIView
+      │
+      ▼
+Sale.objects.register
+      │
+      ▼
+transaction.atomic() → COMMIT o ROLLBACK
+```
+
+**Nota sobre la adaptación a HornoRaíz:** la tabla `sale_details` no tiene `status` (respeta el esquema original). El descuento de stock no aplica porque HornoRaíz no tiene `stock` en `Product`. La transacción se enfoca en: crear la cabecera, crear las líneas con precio histórico y calcular los totales.
+
+**Nota sobre `response.data` vs `response.content`:** `response.data` mantiene los nombres internos (`unit_price`, `client_id`) mientras que `response.content` ya renderizado aplica camelCase (`unitPrice`, `clientId`). Los tests verifican ambos.
+
+### Criterios de aceptación
+
+- **AC-11-01:** 2 × 10.00 + 1 × 4.50 = total 24.50, taxes 0.00, status paid.
+- **AC-11-02:** después de cambiar el precio del catálogo a 99.00, la línea sigue en 10.00.
+- **AC-11-03:** un `items` vacío responde 400 y no crea la venta.
+- **AC-11-04:** un producto inactivo responde 400 y no crea la venta.
+- **AC-11-05:** un producto inexistente responde 400 y no crea la venta.
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py test apps.sale
+curl -X POST http://127.0.0.1:8000/api/sale/sales/ -H "Content-Type: application/json" -d '...'
+```
+
+![Check exitoso](evidencias/EVI-11-06-check-ok.png)
+
+![Tests PASS](evidencias/EVI-11-08-tests-pass.png)
+
+![Prueba con curl](evidencias/EVI-11-09-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-11-01 | totales 24.50 / taxes 0.00 / paid      | EVI-11-08     | PASS          |
+| AC-11-02 | precio histórico no cambia             | EVI-11-08     | PASS          |
+| AC-11-03 | items vacío = 400                      | EVI-11-08     | PASS          |
+| AC-11-04 | producto inactivo = 400                | EVI-11-08     | PASS          |
+| AC-11-05 | producto inexistente = 400             | EVI-11-08     | PASS          |
