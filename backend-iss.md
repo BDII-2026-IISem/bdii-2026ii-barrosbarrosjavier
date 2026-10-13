@@ -2506,3 +2506,338 @@ curl http://127.0.0.1:8000/api/catalog/products/
 | AC-08-02 | `Product.objects.get` encuentra fila | EVI-08-06     | PASS          |
 | AC-08-03 | DELETE lógico, fila con status=False | EVI-08-06     | PASS          |
 | AC-08-04 | nombre corto / sku duplicado = 400   | EVI-08-06     | PASS          |
+
+---
+
+## ISS-09 — Catálogo, producción y ventas con ModelViewSet
+
+### Narrativa
+
+Con el endpoint de `Product` funcionando desde el ISS-08, el siguiente paso consiste en publicar el resto de los recursos de HornoRaíz con el mismo patrón de CRUD homogéneo. Se publican los recursos del catálogo (`Supply`, `Recipe`, `RecipeSupply`, `Promotion`), los de producción (`ProductionBatch`, `SupplyMovement`) y los de ventas (`Sale`, `SaleDetail`, `Payment`). Cada recurso se expone con `ModelViewSet` y `permission_classes = [AllowAny]`, porque la Fase I no tiene JWT.
+
+### Objetivo
+
+Publicar el resto de los recursos de HornoRaíz con el mismo patrón de CRUD homogéneo, exponiendo endpoints REST para consultar, crear, actualizar y eliminar cada tipo de recurso.
+
+### Requisitos
+
+- ISS-08 superado: `ProductViewSet` funcionando.
+- Terminal con el entorno virtual `.venv` activo.
+- Serializers de `catalog`, `production` y `sale` implementados en el ISS-07.
+- Apps `catalog`, `production` y `sale` registradas en `INSTALLED_APPS`.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-09-01-venv-activo.png)
+
+**2. Registrar todos los recursos del catálogo**
+
+```python
+from rest_framework.routers import SimpleRouter
+
+from apps.catalog.views import (
+    ProductViewSet, SupplyViewSet, RecipeViewSet,
+    RecipeSupplyViewSet, PromotionViewSet,
+)
+
+router = SimpleRouter(use_regex_path=False)
+router.register("products", ProductViewSet, basename="product")
+router.register("supplies", SupplyViewSet, basename="supply")
+router.register("recipes", RecipeViewSet, basename="recipe")
+router.register("recipe-supplies", RecipeSupplyViewSet, basename="recipe-supply")
+router.register("promotions", PromotionViewSet, basename="promotion")
+
+urlpatterns = router.urls
+```
+
+![apps/catalog/urls.py](evidencias/EVI-09-02-catalog-urls.png)
+
+**3. Crear `apps/production/views.py`**
+
+```python
+from rest_framework import viewsets
+from rest_framework.permissions import AllowAny
+
+from apps.production.models import ProductionBatch, SupplyMovement
+from apps.production.serializers import (
+    ProductionBatchSerializer, SupplyMovementSerializer,
+)
+
+
+class ProductionBatchViewSet(viewsets.ModelViewSet):
+    queryset = ProductionBatch.objects.select_related("recipe").all()
+    serializer_class = ProductionBatchSerializer
+    permission_classes = [AllowAny]
+    lookup_value_converter = "int"
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        status_value = self.request.query_params.get("status")
+        if status_value is not None:
+            normalized = status_value.strip().lower()
+            if normalized in {"true", "1", "active"}:
+                queryset = queryset.filter(status=True)
+            elif normalized in {"false", "0", "inactive"}:
+                queryset = queryset.filter(status=False)
+        return queryset
+
+    def perform_destroy(self, instance):
+        instance.status = False
+        instance.save(update_fields=["status", "updated_at"])
+
+
+class SupplyMovementViewSet(viewsets.ModelViewSet):
+    queryset = SupplyMovement.objects.select_related(
+        "production_batch", "supply"
+    ).all()
+    serializer_class = SupplyMovementSerializer
+    permission_classes = [AllowAny]
+    lookup_value_converter = "int"
+```
+
+![apps/production/views.py](evidencias/EVI-09-03-production-views.png)
+
+**4. Crear `apps/production/urls.py`**
+
+```python
+from rest_framework.routers import SimpleRouter
+
+from apps.production.views import ProductionBatchViewSet, SupplyMovementViewSet
+
+router = SimpleRouter(use_regex_path=False)
+router.register("production-batches", ProductionBatchViewSet, basename="production-batch")
+router.register("supply-movements", SupplyMovementViewSet, basename="supply-movement")
+
+urlpatterns = router.urls
+```
+
+![apps/production/urls.py](evidencias/EVI-09-04-production-urls.png)
+
+**5. Crear `apps/sale/views.py`**
+
+```python
+from rest_framework import viewsets
+from rest_framework.permissions import AllowAny
+
+from apps.sale.models import Sale, SaleDetail, Payment
+from apps.sale.serializers import (
+    SaleSerializer, SaleDetailSerializer, PaymentSerializer,
+)
+
+
+class SaleViewSet(viewsets.ModelViewSet):
+    queryset = Sale.objects.prefetch_related("details").all()
+    serializer_class = SaleSerializer
+    permission_classes = [AllowAny]
+    lookup_value_converter = "int"
+
+
+class SaleDetailViewSet(viewsets.ModelViewSet):
+    queryset = SaleDetail.objects.select_related("sale", "product").all()
+    serializer_class = SaleDetailSerializer
+    permission_classes = [AllowAny]
+    lookup_value_converter = "int"
+
+
+class PaymentViewSet(viewsets.ModelViewSet):
+    queryset = Payment.objects.all()
+    serializer_class = PaymentSerializer
+    permission_classes = [AllowAny]
+    lookup_value_converter = "int"
+```
+
+![apps/sale/views.py](evidencias/EVI-09-05-sale-views.png)
+
+**6. Crear `apps/sale/urls.py`**
+
+```python
+from rest_framework.routers import SimpleRouter
+
+from apps.sale.views import SaleViewSet, SaleDetailViewSet, PaymentViewSet
+
+router = SimpleRouter(use_regex_path=False)
+router.register("sales", SaleViewSet, basename="sale")
+router.register("sale-details", SaleDetailViewSet, basename="sale-detail")
+router.register("payments", PaymentViewSet, basename="payment")
+
+urlpatterns = router.urls
+```
+
+![apps/sale/urls.py](evidencias/EVI-09-06-sale-urls.png)
+
+**7. Actualizar `config/urls.py`**
+
+```python
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/catalog/", include("apps.catalog.urls")),
+    path("api/production/", include("apps.production.urls")),
+    path("api/sale/", include("apps.sale.urls")),
+]
+```
+
+![config/urls.py](evidencias/EVI-09-07-config-urls.png)
+
+**8. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-09-08-check-ok.png)
+
+**9. Escribir los tests**
+
+`apps/production/tests.py` y `apps/sale/tests.py`. Los tests verifican la conversión a camelCase leyendo los bytes renderizados (`json.loads(response.content)`), porque `response.data` mantiene los nombres internos en `snake_case`.
+
+```python
+# Fragmento de apps/production/tests.py
+def test_create_production_batch(self):
+    response = self.client.post(
+        "/api/production/production-batches/",
+        {"recipe": self.recipe.id, "name": "Lote ISS09"},
+        format="json",
+    )
+    self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    self.assertEqual(response.data["status"], True)
+
+    wire = json.loads(response.content)
+    self.assertEqual(wire["recipeName"], "Receta ISS09")
+    self.assertIn("createdAt", wire)
+```
+
+```python
+# Fragmento de apps/sale/tests.py
+def test_create_sale(self):
+    response = self.client.post(
+        "/api/sale/sales/",
+        {"clientId": None, "date": timezone.now().isoformat(),
+         "subtotal": "1000.00", "taxes": "190.00",
+         "total": "1190.00", "status": "paid"},
+        format="json",
+    )
+    self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    wire = json.loads(response.content)
+    self.assertIn("clientId", wire)
+    self.assertNotIn("client_id", wire)
+```
+
+![Tests de producción y ventas](evidencias/EVI-09-09-tests-py.png)
+
+**10. Ejecutar los tests**
+
+```bash
+python manage.py test apps.catalog apps.production apps.sale
+```
+
+Resultado:
+```
+Found 14 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 0.466s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+![Tests PASS](evidencias/EVI-09-10-tests-pass.png)
+
+**11. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+curl http://127.0.0.1:8000/api/catalog/supplies/ | head -c 300
+curl http://127.0.0.1:8000/api/production/production-batches/ | head -c 300
+curl http://127.0.0.1:8000/api/sale/sales/ | head -c 300
+curl http://127.0.0.1:8000/api/sale/payments/ | head -c 300
+```
+
+Resultados:
+```json
+// Supplies
+[{"id":1,"code":"INS-001","name":"Harina","unitOfMeasure":"kg","minStock":"5.00","status":true}, ...]
+
+// Production batches
+[{"id":1,"recipe":2,"recipeName":"Receta prueba 2","name":"Lote de prueba","status":true,
+ "createdAt":"2026-10-12T21:23:36.201126-05:00","updatedAt":"..."}, ...]
+
+// Sales
+[{"id":1,"clientId":null,"date":"...","subtotal":"1000.00","taxes":"190.00","total":"1190.00",
+ "status":"paid","details":[{"id":1,"sale":1,"product":6,"productName":"Pan de prueba 4",
+ "quantity":"2.00","unitPrice":"500.00","total":"1000.00","notes":null}]}]
+
+// Payments
+[{"id":1,"referenceType":"sale","referenceId":1,"method":"cash","amount":"1190.00",
+ "date":"...","status":"completed"}]
+```
+
+![Prueba con curl](evidencias/EVI-09-11-curl.png)
+
+### Explicación
+
+Se mantuvo el patrón de CRUD homogéneo en vistas que heredan de `ModelViewSet`. Para el catálogo, `ProductViewSet` ya existía desde el ISS-08; los otros 4 se agregaron al mismo router. Para `production` y `sale`, se crearon vistas y routers separados por app.
+
+Las rutas quedan:
+
+```
+/api/catalog/products/         /api/catalog/supplies/
+/api/catalog/recipes/          /api/catalog/recipe-supplies/
+/api/catalog/promotions/
+
+/api/production/production-batches/
+/api/production/supply-movements/
+
+/api/sale/sales/               /api/sale/sale-details/
+/api/sale/payments/
+```
+
+La conversión camelCase se aplica automáticamente en todas las respuestas porque los renderers de DRF están configurados en `settings`. Los campos `unit_of_measure`, `min_stock`, `unit_price`, `reference_type`, `reference_id` aparecen como `unitOfMeasure`, `minStock`, `unitPrice`, `referenceType`, `referenceId` en el JSON.
+
+**Nota sobre `response.data` vs `response.content`:** `response.data` en `APITestCase` es el diccionario interno del serializer (post-validación pero pre-render) y mantiene los nombres en `snake_case`. El camelCase se aplica solo cuando el serializer se renderiza a bytes (lo que se envía por HTTP). Por eso los tests usan `json.loads(response.content)["recipeName"]` para verificar la conversión.
+
+### Criterios de aceptación
+
+- **AC-09-01:** los 10 endpoints responden 200 al listar.
+- **AC-09-02:** un POST válido en cada recurso responde 201.
+- **AC-09-03:** los serializers exponen los campos derivados (`supplyName`, `recipeName`, `productName`) en camelCase.
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py test apps.catalog apps.production apps.sale
+curl http://127.0.0.1:8000/api/catalog/supplies/ | head -c 300
+```
+
+![Check exitoso](evidencias/EVI-09-08-check-ok.png)
+
+![Tests PASS](evidencias/EVI-09-10-tests-pass.png)
+
+![Prueba con curl](evidencias/EVI-09-11-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                                    | **Evidencia** | **Resultado** |
+|----------|-----------------------------------------------------|---------------|---------------|
+| AC-09-01 | los 10 endpoints responden 200                      | EVI-09-11     | PASS          |
+| AC-09-02 | POST válido en cada recurso responde 201            | EVI-09-10     | PASS          |
+| AC-09-03 | campos derivados en camelCase                       | EVI-09-10     | PASS          |
