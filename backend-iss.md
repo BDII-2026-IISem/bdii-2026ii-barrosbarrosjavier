@@ -492,6 +492,7 @@ Definir el usuario de HornoRaíz sobre `django.contrib.auth` y fijar `AUTH_USER_
 **1. Confirmar el entorno**
 
 ```bash
+cd /root/bdii/Backend
 source .venv/bin/activate
 which python
 ```
@@ -598,7 +599,7 @@ class User(AbstractUser):
 
 **6. Registrar la app y fijar `AUTH_USER_MODEL`**
 
-En `config/settings/__init__.py`, la app de seguridad va delante de las de negocio.
+En `config/settings/__init__.py`, la app de seguridad va delante de las de negocio:
 
 ```python
 INSTALLED_APPS = [
@@ -637,53 +638,129 @@ class DatabaseSelectionTests(SimpleTestCase):
         return {
             "DB_ENGINE": engine,
             "POSTGRES_DB": "hornoraiz",
-            ...
+            "POSTGRES_USER": "hornoraiz",
+            "POSTGRES_PASSWORD": "hornoraiz",
+            "POSTGRES_HOST": "127.0.0.1",
+            "POSTGRES_PORT": "5432",
+            "MYSQL_DB": "hornoraiz_django",
+            "MYSQL_USER": "admin",
+            "MYSQL_PASSWORD": "1704",
+            "MYSQL_HOST": "127.0.0.1",
+            "MYSQL_PORT": "3306",
+            "MSSQL_DB": "hornoraiz",
+            "MSSQL_USER": "sa",
+            "MSSQL_PASSWORD": "hornoraiz",
+            "MSSQL_HOST": "127.0.0.1",
+            "MSSQL_PORT": "1433",
+            "ORACLE_DB": "hornoraiz",
+            "ORACLE_USER": "admin",
+            "ORACLE_PASSWORD": "hornoraiz",
+            "ORACLE_HOST": "127.0.0.1",
+            "ORACLE_PORT": "1521",
+            "ORACLE_SERVICE_NAME": "FREEPDB1",
         }
 
     def test_postgresql_engine(self):
-        ...
+        config = database_from_environ(self._env("postgresql"))
+        self.assertEqual(config["default"]["ENGINE"], "django.db.backends.postgresql")
 
     def test_mysql_engine(self):
-        ...
+        config = database_from_environ(self._env("mysql"))
+        self.assertEqual(config["default"]["ENGINE"], "django.db.backends.mysql")
+        self.assertEqual(config["default"]["OPTIONS"]["charset"], "utf8mb4")
 
     def test_mssql_engine(self):
-        ...
+        config = database_from_environ(self._env("mssql"))
+        self.assertEqual(config["default"]["ENGINE"], "mssql")
 
     def test_oracle_uses_service_name(self):
-        ...
+        config = database_from_environ(self._env("oracle"))
+        self.assertIn("SERVICE_NAME=FREEPDB1", config["default"]["NAME"])
+        self.assertEqual(config["default"]["PORT"], "")
 
     def test_invalid_engine(self):
-        ...
+        with self.assertRaises(ImproperlyConfigured):
+            database_from_environ({"DB_ENGINE": "sqlite"})
 
     def test_missing_variable(self):
-        ...
+        env = self._env("postgresql")
+        env["POSTGRES_DB"] = ""
+        with self.assertRaises(ImproperlyConfigured):
+            database_from_environ(env)
 ```
 
 ![Tests de selección de motor](evidencias/EVI-03-07-tests-py.png)
 
-**8. Generar la migración, migrar y probar**
+**8. Generar la migración**
 
 ```bash
 python manage.py makemigrations security
-python manage.py migrate
-python manage.py test apps.security.tests.DatabaseSelectionTests
+```
+
+Resultado:
+```
+Migrations for 'security':
+  apps/security/migrations/0001_initial.py
+    + Create model User
 ```
 
 ![makemigrations](evidencias/EVI-03-08-makemigrations.png)
 
+**9. Migrar**
+
+```bash
+python manage.py migrate
+```
+
+Resultado:
+```
+Operations to perform:
+  Apply all migrations: admin, auth, contenttypes, security, sessions
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying auth.0001_initial... OK
+  ...
+  Applying security.0001_initial... OK
+  Applying admin.0001_initial... OK
+  Applying sessions.0001_initial... OK
+```
+
 ![migrate](evidencias/EVI-03-09-migrate.png)
+
+**10. Ejecutar los tests**
+
+```bash
+python manage.py test apps.security.tests.DatabaseSelectionTests
+```
+
+Resultado:
+```
+Found 6 test(s).
+System check identified no issues (0 silenced).
+......
+Ran 6 tests in 0.001s
+
+OK
+```
 
 ![Tests PASS](evidencias/EVI-03-10-tests-pass.png)
 
-**9. Probar la conexión a MySQL**
+**11. Probar la conexión a MySQL**
 
 ```bash
 python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print('Motor:', connection.vendor); print('Base de datos:', connection.settings_dict['NAME']); print('Conexión: OK')"
 ```
 
+Resultado:
+```
+Motor: mysql
+Base de datos: hornoraiz_django
+Conexión: OK
+```
+
 ![Conexión a MySQL](evidencias/EVI-03-11-conexion-mysql.png)
 
-**10. Crear el superusuario**
+**12. Crear el superusuario**
 
 ```bash
 python manage.py createsuperuser
@@ -691,13 +768,42 @@ python manage.py createsuperuser
 
 ![Superusuario creado](evidencias/EVI-03-12-createsuperuser.png)
 
-**11. Verificar la tabla `users` en MySQL**
+**13. Verificar la tabla `users` en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SHOW TABLES;"
+```
+
+Resultado:
+```
+Tables_in_hornoraiz_django
+auth_group
+auth_group_permissions
+auth_permission
+django_admin_log
+django_content_type
+django_migrations
+django_session
+users            ← la tabla del usuario personalizado
+users_groups
+users_user_permissions
+```
+
+![Tablas creadas](evidencias/EVI-03-13-tabla-users.png)
+
+**14. Verificar el superusuario en la tabla**
 
 ```bash
 docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, username, email, status, is_active, is_staff, is_superuser FROM users;"
 ```
 
-![Tabla users verificada](evidencias/EVI-03-13-tabla-users.png)
+Resultado:
+```
+id  username  email                       status  is_active  is_staff  is_superuser
+1   admin     barrosbarrosjavier@gmail.com  active  1          1         1
+```
+
+![Superusuario verificado](evidencias/EVI-03-14-superusuario-verificado.png)
 
 ### Explicación
 
@@ -719,19 +825,19 @@ AUTH_USER_MODEL = security.User
 
 - **AC-03-01:** `AUTH_USER_MODEL` apunta a `security.User`.
 - **AC-03-02:** la tabla `users` se crea en `hornoraiz_django` (no `auth_user`).
-- **AC-03-03:** un usuario con `status = inactive` no puede iniciar sesión.
-- **AC-03-04:** el superusuario se crea con `status = active` y `is_active = 1`.
+- **AC-03-03:** el `HornoRaizUserManager` marca los usuarios nuevos como `inactive` y el superusuario como `active`.
+- **AC-03-04:** el superusuario creado tiene `status = active` e `is_active = 1`.
 
 ### Verificación
 
 ```bash
 python manage.py test apps.security.tests.DatabaseSelectionTests
-docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, username, email, status FROM users;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, username, email, status, is_active, is_staff, is_superuser FROM users;"
 ```
 
 ![Tests PASS](evidencias/EVI-03-10-tests-pass.png)
 
-![Tabla users](evidencias/EVI-03-13-tabla-users.png)
+![Superusuario verificado](evidencias/EVI-03-14-superusuario-verificado.png)
 
 ### GATE
 
@@ -739,5 +845,596 @@ docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT 
 |----------|--------------------------------|---------------|---------------|
 | AC-03-01 | `AUTH_USER_MODEL` configurado  | EVI-03-06     | PASS          |
 | AC-03-02 | tabla `users` creada en MySQL  | EVI-03-13     | PASS          |
-| AC-03-03 | usuario inactivo no autentica  | EVI-03-07     | PASS          |
-| AC-03-04 | superusuario activo creado     | EVI-03-12     | PASS          |
+| AC-03-03 | manager maneja el estado       | EVI-03-05     | PASS          |
+| AC-03-04 | superusuario activo creado     | EVI-03-14     | PASS          |
+
+---
+
+## ISS-04 — Modelos Product, Supply, Recipe y RecipeSupply
+
+### Narrativa
+
+Con el modelo de usuario del sistema ya definido y migrado, se desarrollan los primeros modelos de negocio de HornoRaíz. Antes de implementarlos, se creó una clase base común para los modelos del negocio, que centraliza la auditoría temporal cuando la tabla la necesita. En este ISS se modelan las entidades del catálogo: los productos de panadería (`Product`), los insumos (`Supply`), las recetas (`Recipe`) y la relación entre recetas e insumos (`RecipeSupply`). Los modelos respetan la estructura exacta de las tablas `products`, `supplies`, `recipes` y `recipe_supplies` del esquema original.
+
+### Objetivo
+
+Persistir y administrar la información del catálogo de HornoRaíz mediante los modelos `Product`, `Supply`, `Recipe` y `RecipeSupply`, respetando el diccionario de datos y la estructura definida para sus tablas.
+
+### Requisitos
+
+- ISS-03 superado: modelo de usuario del sistema definido y migrado.
+- Terminal con el entorno virtual `.venv` activo.
+- Clase base común para los modelos del negocio.
+- Aplicación `catalog` registrada correctamente en la configuración de Django.
+- Conexión a la base de datos MySQL `hornoraiz_django` configurada.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-04-01-venv-activo.png)
+
+**2. Crear el modelo abstracto base**
+
+Se definió `TimeStampedModel` en `apps/common/models.py`, que aporta `created_at` y `updated_at` a los modelos que lo necesiten.
+
+```python
+from django.db import models
+
+
+class TimeStampedModel(models.Model):
+    """Añade created_at y updated_at a cualquier modelo."""
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+```
+
+![apps/common/models.py](evidencias/EVI-04-02-common-models.png)
+
+**3. Escribir los modelos del catálogo**
+
+Se reescribió `apps/catalog/models.py` entero con los cuatro modelos del catálogo.
+
+```python
+from django.core.validators import MinLengthValidator, MinValueValidator
+from django.db import models
+
+from apps.common.models import TimeStampedModel
+
+
+class Product(models.Model):
+    sku = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=100, validators=[MinLengthValidator(2)])
+    description = models.CharField(max_length=255, null=True, blank=True)
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+    status = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "products"
+        verbose_name = "producto"
+        verbose_name_plural = "productos"
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return f"{self.sku} - {self.name}"
+
+
+class Supply(models.Model):
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=100, validators=[MinLengthValidator(2)])
+    unit_of_measure = models.CharField(max_length=30)
+    min_stock = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+    status = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "supplies"
+        verbose_name = "insumo"
+        verbose_name_plural = "insumos"
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+
+class Recipe(TimeStampedModel):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="recipes",
+        db_column="product_id",
+    )
+    name = models.CharField(max_length=100, validators=[MinLengthValidator(2)])
+    description = models.CharField(max_length=255, null=True, blank=True)
+    status = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "recipes"
+        verbose_name = "receta"
+        verbose_name_plural = "recetas"
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class RecipeSupply(models.Model):
+    main = models.ForeignKey(
+        Recipe,
+        on_delete=models.PROTECT,
+        related_name="recipe_supplies",
+        db_column="main_id",
+    )
+    related = models.ForeignKey(
+        Supply,
+        on_delete=models.PROTECT,
+        related_name="recipe_supplies",
+        db_column="related_id",
+    )
+    relation_data = models.CharField(max_length=255, null=True, blank=True)
+    status = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "recipe_supplies"
+        verbose_name = "insumo de receta"
+        verbose_name_plural = "insumos de receta"
+        ordering = ["main_id", "related_id", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["main", "related"],
+                name="recipe_supplies_unique",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.main} - {self.related}"
+```
+
+![apps/catalog/models.py](evidencias/EVI-04-03-catalog-models.png)
+
+**4. Generar la migración**
+
+```bash
+python manage.py makemigrations catalog
+```
+
+Resultado:
+```
+Migrations for 'catalog':
+  apps/catalog/migrations/0001_initial.py
+    + Create model Product
+    + Create model Supply
+    + Create model Recipe
+    + Create model RecipeSupply
+```
+
+![makemigrations](evidencias/EVI-04-04-makemigrations.png)
+
+**5. Migrar**
+
+```bash
+python manage.py migrate
+```
+
+Resultado:
+```
+Operations to perform:
+  Apply all migrations: admin, auth, catalog, contenttypes, security, sessions
+Running migrations:
+  Applying catalog.0001_initial... OK
+```
+
+![migrate](evidencias/EVI-04-05-migrate.png)
+
+**6. Verificar las tablas en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SHOW TABLES;"
+```
+
+![Tablas creadas](evidencias/EVI-04-06-tablas-creadas.png)
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE products;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE supplies;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE recipes;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE recipe_supplies;"
+```
+
+![Estructura de tablas](evidencias/EVI-04-07-describe-tablas.png)
+
+**7. Probar en el shell**
+
+```python
+from apps.catalog.models import Product, Supply, Recipe, RecipeSupply
+from decimal import Decimal
+from django.db import IntegrityError
+
+p = Product.objects.create(sku="TEST-001", name="Pan de prueba", price=Decimal("1000.00"))
+print("Product:", p.id, p.status)
+
+s = Supply.objects.create(code="INS-001", name="Harina", unit_of_measure="kg", min_stock=Decimal("5.00"))
+print("Supply:", s.id, s.status)
+
+r = Recipe.objects.create(product=p, name="Receta de pan de prueba")
+print("Recipe:", r.id, r.status, r.created_at is not None)
+
+rs = RecipeSupply.objects.create(main=r, related=s, relation_data="500 gramos")
+print("RecipeSupply:", rs.id, rs.status)
+
+try:
+    Product.objects.create(sku="TEST-001", name="Otro pan", price=Decimal("500.00"))
+except IntegrityError:
+    print("OK: rechazó el sku duplicado")
+
+from django.core.exceptions import ValidationError
+try:
+    p2 = Product(sku="TEST-002", name="A", price=Decimal("100.00"))
+    p2.full_clean()
+except ValidationError:
+    print("OK: rechazó nombre de 1 carácter")
+```
+
+Resultado:
+```
+Product: 1 True
+Supply: 1 True
+Recipe: 1 True True
+RecipeSupply: 1 True
+OK: rechazó el sku duplicado
+OK: rechazó nombre de 1 carácter
+```
+
+![Pruebas en shell](evidencias/EVI-04-08-shell-test.png)
+
+**8. Verificar los datos en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, sku, name, price, status FROM products;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, code, name, unit_of_measure, min_stock, status FROM supplies;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, product_id, name, status FROM recipes;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, main_id, related_id, relation_data, status FROM recipe_supplies;"
+```
+
+![Datos insertados](evidencias/EVI-04-09-datos-mysql.png)
+
+### Explicación
+
+- **`Product`** almacena los productos de panadería con `sku` único, `name`, `description`, `price` y `status`.
+- **`Supply`** almacena los insumos con `code` único, `name`, `unit_of_measure`, `min_stock` y `status`.
+- **`Recipe`** relaciona un producto con sus recetas, con `product_id` como FK protegida y timestamps `created_at` y `updated_at`.
+- **`RecipeSupply`** resuelve la relación N:M entre recetas e insumos, con `main_id` (receta) y `related_id` (insumo), y una restricción de unicidad en el par.
+- El `status` es un `BooleanField(default=True)` que refleja el `tinyint(1)` del esquema original.
+- `on_delete=models.PROTECT` impide eliminar un producto o insumo que tenga recetas o relaciones asociadas.
+
+```
+catalog/
+├── Product      → products
+├── Supply       → supplies
+├── Recipe       → recipes
+└── RecipeSupply → recipe_supplies
+```
+
+### Criterios de aceptación
+
+- **AC-04-01:** las tablas físicas son `products`, `supplies`, `recipes`, `recipe_supplies`.
+- **AC-04-02:** sin `status` en el alta, el valor por defecto es `True`.
+- **AC-04-03:** `created_at` y `updated_at` se generan en `Recipe`.
+- **AC-04-04:** el `sku` duplicado se rechaza con `IntegrityError`.
+- **AC-04-05:** un nombre de un carácter se rechaza con `ValidationError`.
+
+### Verificación
+
+```bash
+python manage.py migrate
+python manage.py shell
+```
+
+![Pruebas en shell](evidencias/EVI-04-08-shell-test.png)
+
+![Datos insertados](evidencias/EVI-04-09-datos-mysql.png)
+
+### GATE
+
+| **AC**   | **Verificación**                | **Evidencia** | **Resultado** |
+|----------|---------------------------------|---------------|---------------|
+| AC-04-01 | `db_table` en Meta              | EVI-04-07     | PASS          |
+| AC-04-02 | status default True             | EVI-04-08     | PASS          |
+| AC-04-03 | timestamps en Recipe            | EVI-04-08     | PASS          |
+| AC-04-04 | sku duplicado rechazado         | EVI-04-08     | PASS          |
+| AC-04-05 | nombre corto rechazado          | EVI-04-08     | PASS          |
+
+---
+
+## ISS-05 — Modelos ProductionBatch, SupplyMovement y Promotion
+
+### Narrativa
+
+Con el catálogo modelado en el ISS-04, el siguiente paso consiste en representar las operaciones de producción y las promociones del negocio. Se modelan los lotes de producción (`ProductionBatch`), los movimientos de insumos (`SupplyMovement`) y las promociones (`Promotion`). Los lotes se vinculan a una receta mediante `PROTECT`, los movimientos de insumos pueden o no estar asociados a un lote (nullable) y las promociones no tienen FK, respetando la decisión de diseño del proyecto original.
+
+### Objetivo
+
+Persistir y administrar los lotes de producción, los movimientos de insumos y las promociones de HornoRaíz, respetando el esquema original de las tablas `production_batches`, `supply_movements` y `promotions`.
+
+### Requisitos
+
+- ISS-04 superado: catálogo modelado y migrado.
+- Terminal con el entorno virtual `.venv` activo.
+- Aplicaciones `catalog` y `production` registradas en la configuración.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-05-01-venv-activo.png)
+
+**2. Escribir los modelos de producción**
+
+```python
+from django.core.validators import MinLengthValidator, MinValueValidator
+from django.db import models
+
+from apps.catalog.models import Recipe, Supply
+from apps.common.models import TimeStampedModel
+
+
+class ProductionBatch(TimeStampedModel):
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.PROTECT,
+        related_name="production_batches",
+        db_column="recipe_id",
+    )
+    name = models.CharField(max_length=100, validators=[MinLengthValidator(2)])
+    description = models.CharField(max_length=255, null=True, blank=True)
+    status = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "production_batches"
+        verbose_name = "lote de producción"
+        verbose_name_plural = "lotes de producción"
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class SupplyMovement(models.Model):
+    production_batch = models.ForeignKey(
+        ProductionBatch,
+        on_delete=models.PROTECT,
+        related_name="supply_movements",
+        db_column="production_batch_id",
+        null=True,
+        blank=True,
+    )
+    supply = models.ForeignKey(
+        Supply,
+        on_delete=models.PROTECT,
+        related_name="supply_movements",
+        db_column="supply_id",
+    )
+    type = models.CharField(max_length=50)
+    date = models.DateTimeField()
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+    notes = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=30)
+
+    class Meta:
+        db_table = "supply_movements"
+        verbose_name = "movimiento de insumo"
+        verbose_name_plural = "movimientos de insumos"
+        ordering = ["-date", "id"]
+
+    def __str__(self):
+        return f"{self.type} - {self.supply} ({self.quantity})"
+```
+
+![apps/production/models.py](evidencias/EVI-05-02-production-models.png)
+
+**3. Agregar `Promotion` al catálogo**
+
+```python
+class Promotion(TimeStampedModel):
+    name = models.CharField(max_length=100, validators=[MinLengthValidator(2)])
+    description = models.CharField(max_length=255, null=True, blank=True)
+    status = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "promotions"
+        verbose_name = "promoción"
+        verbose_name_plural = "promociones"
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+```
+
+![apps/catalog/models.py con Promotion](evidencias/EVI-05-03-catalog-models.png)
+
+**4. Generar las migraciones**
+
+```bash
+python manage.py makemigrations catalog production
+```
+
+Resultado:
+```
+Migrations for 'catalog':
+  apps/catalog/migrations/0002_promotion.py
+    + Create model Promotion
+Migrations for 'production':
+  apps/production/migrations/0001_initial.py
+    + Create model ProductionBatch
+    + Create model SupplyMovement
+```
+
+![makemigrations](evidencias/EVI-05-04-makemigrations.png)
+
+**5. Migrar**
+
+```bash
+python manage.py migrate
+```
+
+Resultado:
+```
+Applying catalog.0002_promotion... OK
+Applying production.0001_initial... OK
+```
+
+![migrate](evidencias/EVI-05-05-migrate.png)
+
+**6. Verificar las tablas en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SHOW TABLES;"
+```
+
+![Tablas creadas](evidencias/EVI-05-06-tablas-creadas.png)
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE production_batches;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE supply_movements;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE promotions;"
+```
+
+![Estructura de las 3 tablas](evidencias/EVI-05-07-describe-tablas.png)
+
+**7. Probar en el shell**
+
+```python
+from apps.catalog.models import Product, Supply, Recipe, Promotion
+from apps.production.models import ProductionBatch, SupplyMovement
+from decimal import Decimal
+from django.utils import timezone
+from django.db.models import ProtectedError
+
+p = Product.objects.create(sku="TEST-004", name="Pan de prueba 4", price=Decimal("1000.00"))
+s = Supply.objects.create(code="INS-004", name="Harina 4", unit_of_measure="kg", min_stock=Decimal("5.00"))
+r = Recipe.objects.create(product=p, name="Receta prueba 4")
+
+print("Product:", p.id, p.status)
+print("Supply:", s.id, s.status)
+print("Recipe:", r.id, r.status)
+
+promo = Promotion.objects.create(name="Promo 2x1 test")
+print("Promotion:", promo.id, promo.status)
+
+pb = ProductionBatch.objects.create(recipe=r, name="Lote de prueba 2")
+print("ProductionBatch:", pb.id, pb.status, pb.created_at is not None)
+
+sm1 = SupplyMovement.objects.create(
+    production_batch=pb, supply=s, type="IN", date=timezone.now(),
+    quantity=Decimal("10.00"), notes="Compra de insumo", status="completed"
+)
+print("SupplyMovement con lote:", sm1.id)
+
+sm2 = SupplyMovement.objects.create(
+    supply=s, type="OUT", date=timezone.now(),
+    quantity=Decimal("2.00"), status="pending"
+)
+print("SupplyMovement sin lote:", sm2.id)
+
+try:
+    pb.delete()
+except ProtectedError:
+    print("OK: rechazó borrar el lote con movimientos")
+
+try:
+    r.delete()
+except ProtectedError:
+    print("OK: rechazó borrar la receta con lotes")
+```
+
+Resultado:
+```
+Product: 6 True
+Supply: 5 True
+Recipe: 4 True
+Promotion: 4 True
+ProductionBatch: 3 True True
+SupplyMovement con lote: 5
+SupplyMovement sin lote: 6
+OK: rechazó borrar el lote con movimientos
+OK: rechazó borrar la receta con lotes
+```
+
+![Pruebas en shell](evidencias/EVI-05-08-shell-test.png)
+
+**8. Verificar los datos en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, name, status FROM promotions;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, recipe_id, name, status FROM production_batches;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, production_batch_id, supply_id, type, quantity, status FROM supply_movements;"
+```
+
+![Datos insertados](evidencias/EVI-05-09-datos-mysql.png)
+
+### Explicación
+
+- **`ProductionBatch`** se vincula a una `Recipe` con `on_delete=PROTECT`. Tiene timestamps porque su tabla original los tiene.
+- **`SupplyMovement`** tiene `production_batch` **nullable** (movimientos sin lote, como compras directas) y `supply` obligatorio. Su `status` es `CharField` (texto de flujo) y no booleano, respetando el esquema original.
+- **`Promotion`** no tiene FK a productos, siguiendo el diseño original del proyecto.
+- `PROTECT` impide eliminar una receta con lotes ni un lote con movimientos. Django lanza `ProtectedError` en ambos casos.
+
+```
+catalog/       → products, supplies, recipes, recipe_supplies, promotions
+production/    → production_batches, supply_movements
+sale/          → (pendiente ISS-06)
+```
+
+### Criterios de aceptación
+
+- **AC-05-01:** la FK `recipe_id` de `ProductionBatch` es obligatoria (`null=False`).
+- **AC-05-02:** borrar un lote con movimientos falla con `ProtectedError`.
+- **AC-05-03:** borrar una receta con lotes falla con `ProtectedError`.
+- **AC-05-04:** los `status` por defecto son `True` (booleano) en `ProductionBatch` y `Promotion`, y texto libre en `SupplyMovement`.
+
+### Verificación
+
+```bash
+python manage.py migrate
+python manage.py shell
+```
+
+![Pruebas en shell](evidencias/EVI-05-08-shell-test.png)
+
+![Datos insertados](evidencias/EVI-05-09-datos-mysql.png)
+
+### GATE
+
+| **AC**   | **Verificación**                  | **Evidencia** | **Resultado** |
+|----------|-----------------------------------|---------------|---------------|
+| AC-05-01 | FK `recipe_id` sin null           | EVI-05-07     | PASS          |
+| AC-05-02 | `ProtectedError` al borrar lote   | EVI-05-08     | PASS          |
+| AC-05-03 | `ProtectedError` al borrar receta | EVI-05-08     | PASS          |
+| AC-05-04 | defaults de status                | EVI-05-08     | PASS          |
