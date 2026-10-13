@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.mixins import (
     DestroyModelMixin,
@@ -54,6 +55,13 @@ class SaleReadViewSet(
 class SaleCollectionAPIView(APIView):
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        request=SaleRegisterSerializer,
+        responses={201: SaleSerializer},
+        description="Registra una venta con sus líneas en una sola transacción.",
+        operation_id="sale_register",
+        tags=["sale"],
+    )
     def post(self, request, *args, **kwargs):
         handler = SaleRegisterAPIView()
         handler.request = request
@@ -62,12 +70,18 @@ class SaleCollectionAPIView(APIView):
         handler.kwargs = {}
         return handler.post(request)
 
+    @extend_schema(
+        responses={200: SaleSerializer(many=True)},
+        description="Lista todas las ventas registradas.",
+        operation_id="sale_list",
+        tags=["sale"],
+    )
     def get(self, request, *args, **kwargs):
         handler = SaleReadViewSet()
         handler.request = request
         handler.format_kwarg = None
         handler.args = ()
         handler.kwargs = {}
-        handler.action_map = {"get": "list"}
         handler.action = "list"
+        handler.action_map = {"get": "list"}
         return handler.list(request, *args, **kwargs)

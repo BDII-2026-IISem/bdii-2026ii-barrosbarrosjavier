@@ -4166,3 +4166,339 @@ curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8000/admin/
 | AC-13-03 | Product lista `price`                             | EVI-13-03     | PASS          |
 | AC-13-04 | `has_add_permission`/`has_delete_permission`      | EVI-13-05     | PASS          |
 | AC-13-05 | `manage.py check` sin quejas                      | EVI-13-06     | PASS          |
+
+---
+
+## ISS-14 — OpenAPI con drf-spectacular
+
+### Narrativa
+
+Con las 10 rutas de la API funcionando y el admin de inspección publicado, el siguiente paso consiste en publicar el contrato de la API en un esquema OpenAPI generado automáticamente desde las vistas. Se usa `drf-spectacular`, que lee serializers, querysets y anotaciones `extend_schema`, y produce el YAML sin escribirlo a mano. El esquema sirve como documentación viva y como base para generar clientes en el frontend. Esta unidad cierra la Fase I — Business.
+
+### Objetivo
+
+Publicar el contrato de la API en un esquema OpenAPI generado desde las vistas, con Swagger UI y ReDoc como interfaces de navegación, y validar que el esquema se genere sin errores.
+
+### Requisitos
+
+- ISS-13 superado.
+- Terminal con el entorno virtual `.venv` activo.
+- `drf-spectacular==0.30.0` (versión fijada para DRF 3.17).
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-14-01-venv-activo.png)
+
+**2. Instalar drf-spectacular**
+
+```bash
+python -m pip install "drf-spectacular==0.30.0"
+python -m pip freeze > requirements.txt
+```
+
+![Instalación de drf-spectacular](evidencias/EVI-14-02-instalacion-spectacular.png)
+
+**3. Configurar `config/settings/__init__.py`**
+
+Se agregó `drf_spectacular` a `INSTALLED_APPS`, el `DEFAULT_SCHEMA_CLASS` dentro de `REST_FRAMEWORK`, y el bloque `SPECTACULAR_SETTINGS` al final del archivo.
+
+```python
+INSTALLED_APPS = [
+    # ...
+    "rest_framework",
+    "drf_spectacular",
+    "corsheaders",
+    # ...
+]
+
+REST_FRAMEWORK = {
+    # ...
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # ...
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "HornoRaíz API",
+    "DESCRIPTION": "API REST de HornoRaíz — Producción y venta de panadería.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "CAMELIZE_NAMES": True,
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "drf_spectacular.contrib.djangorestframework_camel_case.camelize_serializer_fields",
+    ],
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
+    "SWAGGER_UI_SETTINGS": {"persistAuthorization": True},
+}
+```
+
+![config/settings/__init__.py](evidencias/EVI-14-03-settings.png)
+
+**4. Actualizar `config/urls.py`**
+
+Se agregaron las 3 rutas del esquema, antes de los `include` de las apps.
+
+```python
+from django.contrib import admin
+from django.urls import include, path
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/schema/swagger-ui/",
+         SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path("api/schema/redoc/",
+         SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    path("api/catalog/", include("apps.catalog.urls")),
+    path("api/production/", include("apps.production.urls")),
+    path("api/sale/", include("apps.sale.urls")),
+]
+```
+
+![config/urls.py](evidencias/EVI-14-04-urls.png)
+
+**5. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-14-05-check-ok.png)
+
+**6. Anotar `SaleCollectionAPIView` con `extend_schema`**
+
+La `SaleCollectionAPIView` es un `APIView` que reenvía el request a `SaleRegisterAPIView` y `SaleReadViewSet`. Como no tiene `serializer_class` propio, `drf-spectacular` no puede adivinar qué usar. Se anotan sus métodos con `@extend_schema`:
+
+```python
+from drf_spectacular.utils import extend_schema
+
+
+class SaleCollectionAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        request=SaleRegisterSerializer,
+        responses={201: SaleSerializer},
+        description="Registra una venta con sus líneas en una sola transacción.",
+        operation_id="sale_register",
+        tags=["sale"],
+    )
+    def post(self, request, *args, **kwargs):
+        ...
+
+    @extend_schema(
+        responses={200: SaleSerializer(many=True)},
+        description="Lista todas las ventas registradas.",
+        operation_id="sale_list",
+        tags=["sale"],
+    )
+    def get(self, request, *args, **kwargs):
+        ...
+```
+
+Los `operation_id` únicos (`sale_register`, `sale_list`) evitan la colisión entre el GET del collection y el GET del detalle.
+
+**7. Validar el esquema**
+
+```bash
+python manage.py spectacular --file /tmp/hornoraiz-schema.yml --validate
+echo "Exit code: $?"
+```
+
+Resultado:
+```
+Exit code: 0
+```
+
+La validación no imprime nada si todo está bien. El código de salida 0 confirma que el esquema se generó sin errores ni warnings.
+
+![Validación del esquema](evidencias/EVI-14-06-validate-ok.png)
+
+**8. Revisar el YAML generado**
+
+```bash
+head -60 /tmp/hornoraiz-schema.yml
+```
+
+Resultado (fragmento):
+```yaml
+openapi: 3.0.3
+info:
+  title: HornoRaíz API
+  version: 1.0.0
+  description: API REST de HornoRaíz — Producción y venta de panadería.
+paths:
+  /api/catalog/products/:
+    ...
+```
+
+![YAML del esquema](evidencias/EVI-14-07-yaml-head.png)
+
+**9. Verificar el camelCase en el YAML**
+
+```bash
+grep -n "createdAt\|clientId\|unitPrice" /tmp/hornoraiz-schema.yml | head -10
+```
+
+Resultado (fragmento):
+```
+1367:            createdAt:
+1376:      - createdAt:
+1416:              createdAt:
+1425:      - createdAt:
+1465:              createdAt:
+1474:      - createdAt:
+1548:            clientId:
+1600:            unitPrice:
+1619:      - unitPrice:
+1634:            clientId:
+```
+
+El hook `camelize_serializer_fields` alinea el YAML con el JSON camelCase que la API devuelve.
+
+![camelCase en el YAML](evidencias/EVI-14-08-camelcase-yaml.png)
+
+**10. Probar las 3 rutas del esquema con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+curl -s -o /dev/null -w "Schema HTTP %{http_code}\n" http://127.0.0.1:8000/api/schema/
+curl -s -o /dev/null -w "Swagger HTTP %{http_code}\n" http://127.0.0.1:8000/api/schema/swagger-ui/
+curl -s -o /dev/null -w "Redoc HTTP %{http_code}\n" http://127.0.0.1:8000/api/schema/redoc/
+```
+
+Resultado:
+```
+=== Schema ===
+HTTP 200
+=== Swagger UI ===
+HTTP 200
+=== ReDoc ===
+HTTP 200
+```
+
+Las tres rutas están en acceso abierto (`SERVE_PERMISSIONS: AllowAny`), así que se pueden abrir sin token.
+
+![Rutas del esquema](evidencias/EVI-14-09-schema-curl.png)
+
+**11. Ejecutar la suite completa**
+
+```bash
+python manage.py test apps.catalog apps.production apps.sale
+```
+
+Resultado (18 tests OK):
+```
+Found 18 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+..................
+----------------------------------------------------------------------
+Ran 18 tests in 1.449s
+
+OK
+```
+
+La suite son 18 tests: 5 del catálogo (Product CRUD + disponibles), 4 de producción (lotes y movimientos) y 9 de ventas (registro, precio histórico, anulación).
+
+![Suite completa PASS](evidencias/EVI-14-10-suite-completa.png)
+
+### Explicación
+
+`drf-spectacular` lee los serializers, los querysets y las anotaciones `@extend_schema` para generar el esquema OpenAPI sin escribir YAML a mano. Los `POSTPROCESSING_HOOKS` incluyen `camelize_serializer_fields`, que alinea el YAML con el JSON camelCase que la API devuelve (`createdAt`, `unitPrice`, `clientId`).
+
+Una `APIView` que no declara `serializer_class` (como `SaleCollectionAPIView`) requiere `@extend_schema` para que spectacular sepa qué usar. Sin esa anotación, `--validate` reporta `unable to guess serializer` y una colisión de `operationId`.
+
+`SERVE_PERMISSIONS: AllowAny` deja el esquema abierto. En la Fase I no hay JWT; en la Fase II, cuando el permiso global sea `IsAuthenticated`, las tres rutas del esquema no lo heredan porque declaran sus propios permisos.
+
+```
+/api/schema/                 → YAML OpenAPI
+/api/schema/swagger-ui/      → Swagger UI
+/api/schema/redoc/           → ReDoc
+```
+
+Las rutas quedan delante de los `include("apps...")` para dejar claro que documentan la API completa, no un recurso específico.
+
+### Criterios de aceptación
+
+- **AC-14-01:** `python manage.py spectacular --validate` termina con código de salida 0.
+- **AC-14-02:** Swagger y el esquema son accesibles sin Bearer.
+- **AC-14-03:** el esquema describe el cuerpo camelCase (`createdAt`, `unitPrice`, `clientId`).
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py spectacular --file /tmp/hornoraiz-schema.yml --validate
+curl -s -o /dev/null -w "Schema HTTP %{http_code}\n" http://127.0.0.1:8000/api/schema/
+python manage.py test apps.catalog apps.production apps.sale
+```
+
+![Validación del esquema](evidencias/EVI-14-06-validate-ok.png)
+
+![Rutas del esquema](evidencias/EVI-14-09-schema-curl.png)
+
+![Suite completa PASS](evidencias/EVI-14-10-suite-completa.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-14-01 | `spectacular --validate` exit code 0   | EVI-14-06     | PASS          |
+| AC-14-02 | Swagger y schema sin Bearer            | EVI-14-09     | PASS          |
+| AC-14-03 | hook camelCase en SPECTACULAR_SETTINGS | EVI-14-08     | PASS          |
+
+---
+
+## Cierre de la Fase I — Business
+
+Esta fase es solo negocio. No hay login, no hay JWT, no hay RBAC. Los tres accesos de la API se definen en la Fase II.
+
+**Qué queda construido:**
+- 10 modelos en 3 apps (`catalog`, `production`, `sale`) más `security` con el usuario personalizado.
+- Serializers con conversión camelCase.
+- CRUD completo de 10 recursos con `ModelViewSet`.
+- Endpoint de disponibles con `ListAPIView`.
+- Registro transaccional de ventas con `APIView`.
+- Anulación lógica de ventas con `void()` idempotente.
+- Admin de inspección para las 10 tablas.
+- Esquema OpenAPI con Swagger UI y ReDoc.
+
+**Verificación integral:**
+```bash
+python manage.py check
+python manage.py migrate
+python manage.py test apps.catalog apps.production apps.sale
+```
+
+### GATE BUSINESS
+
+| AC | Verificación | Evidencia | Resultado |
+|----|--------------|-----------|-----------|
+| Modelos y relaciones | migraciones y tests | suite | PASS |
+| Transacción atómica | `SaleTransactionTests` | suite | PASS |
+| Serializers y camelCase | test de `response.content` | suite | PASS |
+| Tres estilos de vista usados con motivo | ISS-08, ISS-10, ISS-11 | código | PASS |
+| Multidialecto | MySQL | suite | PASS en MySQL |
+| PostgreSQL, SQL Server, Oracle | sin levantar | — | NO VERIFICADO |
+
+El GATE de negocio se considera superado para MySQL. No autoriza a decir que PostgreSQL, SQL Server u Oracle corrieron el laboratorio.
