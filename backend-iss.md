@@ -1438,3 +1438,782 @@ python manage.py shell
 | AC-05-02 | `ProtectedError` al borrar lote   | EVI-05-08     | PASS          |
 | AC-05-03 | `ProtectedError` al borrar receta | EVI-05-08     | PASS          |
 | AC-05-04 | defaults de status                | EVI-05-08     | PASS          |
+
+---
+
+## ISS-06 — Modelos Sale, SaleDetail y Payment
+
+### Narrativa
+
+Con el catálogo y la producción modelados, el siguiente paso consiste en representar las transacciones comerciales de HornoRaíz. Se modelan las ventas (`Sale`), sus líneas de detalle (`SaleDetail`) y los pagos (`Payment`). Cada venta guarda el `unit_price` en el momento de la venta, de modo que si el precio del producto cambia después, la venta conserva el valor histórico aplicado. El detalle no se reemplaza por un `ManyToManyField`, porque cada línea tiene información propia: cantidad, precio unitario, total y observaciones. La relación con el cliente es un `IntegerField` sin FK, porque las ventas de mostrador pueden no tener cliente registrado, respetando el esquema original.
+
+### Objetivo
+
+Persistir y administrar las ventas, sus líneas de detalle y los pagos de HornoRaíz, respetando el esquema original de las tablas `sales`, `sale_details` y `payments`, garantizando el precio histórico por línea.
+
+### Requisitos
+
+- ISS-05 superado: catálogo y producción modelados.
+- Terminal con el entorno virtual `.venv` activo.
+- Aplicación `sale` registrada en la configuración.
+- Modelo `Product` disponible en `apps/catalog`.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-06-01-venv-activo.png)
+
+**2. Crear el manager de ventas**
+
+`apps/sale/managers.py` es nuevo. En este ISS el manager todavía no registra la venta: solo permite que el modelo `Sale` tenga un manager propio (`objects`) con su `QuerySet`.
+
+```python
+from django.db import models
+
+
+class SaleQuerySet(models.QuerySet):
+    pass
+
+
+class SaleManager(models.Manager.from_queryset(SaleQuerySet)):
+    pass
+```
+
+![apps/sale/managers.py](evidencias/EVI-06-02-managers-py.png)
+
+**3. Escribir los modelos de venta**
+
+```python
+from decimal import Decimal
+
+from django.core.validators import MinValueValidator
+from django.db import models
+
+from apps.catalog.models import Product
+from apps.sale.managers import SaleManager
+
+
+class Sale(models.Model):
+    client_id = models.IntegerField(null=True, blank=True)
+    date = models.DateTimeField()
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    taxes = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=30)
+
+    objects = SaleManager()
+
+    class Meta:
+        db_table = "sales"
+        verbose_name = "venta"
+        verbose_name_plural = "ventas"
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return f"Venta {self.pk}"
+
+
+class SaleDetail(models.Model):
+    sale = models.ForeignKey(
+        Sale,
+        on_delete=models.PROTECT,
+        related_name="details",
+        db_column="header_id",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="sale_details",
+        db_column="item_id",
+    )
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    notes = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table = "sale_details"
+        verbose_name = "detalle de venta"
+        verbose_name_plural = "detalles de venta"
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.product} x {self.quantity}"
+
+    def save(self, *args, **kwargs):
+        self.total = (self.unit_price * self.quantity).quantize(Decimal("0.01"))
+        super().save(*args, **kwargs)
+
+
+class Payment(models.Model):
+    reference_type = models.CharField(max_length=50)
+    reference_id = models.IntegerField()
+    method = models.CharField(max_length=50)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    date = models.DateTimeField()
+    status = models.CharField(max_length=30)
+
+    class Meta:
+        db_table = "payments"
+        verbose_name = "pago"
+        verbose_name_plural = "pagos"
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return f"Pago {self.pk} - {self.amount}"
+```
+
+![apps/sale/models.py](evidencias/EVI-06-03-sale-models.png)
+
+**4. Generar la migración**
+
+```bash
+python manage.py makemigrations sale
+```
+
+Resultado:
+```
+Migrations for 'sale':
+  apps/sale/migrations/0001_initial.py
+    + Create model Payment
+    + Create model Sale
+    + Create model SaleDetail
+```
+
+![makemigrations](evidencias/EVI-06-04-makemigrations.png)
+
+**5. Migrar**
+
+```bash
+python manage.py migrate
+```
+
+Resultado:
+```
+Applying sale.0001_initial... OK
+```
+
+![migrate](evidencias/EVI-06-05-migrate.png)
+
+**6. Verificar las tablas en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SHOW TABLES;"
+```
+
+![Tablas creadas](evidencias/EVI-06-06-tablas-creadas.png)
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE sales;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE sale_details;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE payments;"
+```
+
+![Estructura de las 3 tablas](evidencias/EVI-06-07-describe-tablas.png)
+
+**7. Probar en el shell**
+
+```python
+from apps.catalog.models import Product
+from apps.sale.models import Sale, SaleDetail, Payment
+from decimal import Decimal
+from django.utils import timezone
+from django.db.models import ProtectedError
+
+p = Product.objects.filter(sku="TEST-004").first()
+print("Producto base:", p.id, p.name, "precio actual:", p.price)
+
+sale = Sale.objects.create(
+    client_id=None,
+    date=timezone.now(),
+    subtotal=Decimal("1000.00"),
+    taxes=Decimal("190.00"),
+    total=Decimal("1190.00"),
+    status="paid",
+)
+print("Sale:", sale.id, sale.status, sale.total)
+
+det = SaleDetail.objects.create(
+    sale=sale,
+    product=p,
+    quantity=Decimal("2.00"),
+    unit_price=Decimal("500.00"),
+)
+print("SaleDetail:", det.id, "unit_price:", det.unit_price, "total:", det.total)
+
+pay = Payment.objects.create(
+    reference_type="sale",
+    reference_id=sale.id,
+    method="cash",
+    amount=Decimal("1190.00"),
+    date=timezone.now(),
+    status="completed",
+)
+print("Payment:", pay.id, pay.method, pay.amount)
+
+# Precio histórico
+p_orig_price = p.price
+p.price = Decimal("9999.99")
+p.save()
+det.refresh_from_db()
+print("Precio del producto cambió a:", p.price)
+print("unit_price del detalle sigue siendo:", det.unit_price)
+
+p.price = p_orig_price
+p.save()
+
+# PROTECT
+try:
+    sale.delete()
+except ProtectedError:
+    print("OK: rechazó borrar la venta con detalles")
+```
+
+Resultado:
+```
+Producto base: 6 Pan de prueba 4 precio actual: 1000.00
+Sale: 1 paid 1190.00
+SaleDetail: 1 unit_price: 500.00 total: 1000.00
+Payment: 1 cash 1190.00
+Precio del producto cambió a: 9999.99
+unit_price del detalle sigue siendo: 500.00
+OK: rechazó borrar la venta con detalles
+```
+
+![Pruebas en shell](evidencias/EVI-06-08-shell-test.png)
+
+**8. Verificar los datos en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, client_id, date, subtotal, taxes, total, status FROM sales;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, header_id, item_id, quantity, unit_price, total, notes FROM sale_details;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, reference_type, reference_id, method, amount, status FROM payments;"
+```
+
+![Datos insertados](evidencias/EVI-06-09-datos-mysql.png)
+
+### Explicación
+
+- **`Sale`** guarda la fecha, el `subtotal`, los `taxes`, el `total` y el `status` como `varchar(30)`. Su `client_id` es un `IntegerField` **sin FK**, porque las ventas de mostrador pueden no tener cliente registrado.
+- **`SaleDetail`** tiene `unit_price` como columna, de modo que si el precio del producto cambia después, la venta conserva el valor histórico aplicado. El `total` se recalcula en `save()` para que no se persista un valor distinto de `unit_price × quantity`.
+- **`Payment`** guarda la referencia polimórfica (`reference_type` + `reference_id`), el método de pago y el estado como `varchar(30)`.
+- No hay `ManyToManyField`. La navegación es `sale.details.all()`.
+- `PROTECT` impide eliminar una venta que tenga líneas de detalle.
+
+```
+Sale 1 ─────── N SaleDetail N ─────── 1 Product
+```
+
+### Criterios de aceptación
+
+- **AC-06-01:** existen las tablas `sales`, `sale_details` y `payments`.
+- **AC-06-02:** las FK de `SaleDetail` usan `PROTECT`.
+- **AC-06-03:** `SaleDetail.total` se recalcula en `save()` a partir de `unit_price × quantity`.
+- **AC-06-04:** no hay `ManyToManyField` hacia `Product`.
+- **AC-06-05:** el `unit_price` guardado en el detalle no cambia aunque el precio del producto cambie después.
+
+### Verificación
+
+```bash
+python manage.py migrate
+python manage.py shell
+```
+
+![Pruebas en shell](evidencias/EVI-06-08-shell-test.png)
+
+![Datos insertados](evidencias/EVI-06-09-datos-mysql.png)
+
+### GATE
+
+| **AC**   | **Verificación**                            | **Evidencia** | **Resultado** |
+|----------|---------------------------------------------|---------------|---------------|
+| AC-06-01 | tablas `sales`, `sale_details`, `payments`  | EVI-06-07     | PASS          |
+| AC-06-02 | `on_delete=PROTECT` en `SaleDetail`         | EVI-06-07     | PASS          |
+| AC-06-03 | `total` recalculado en `save()`             | EVI-06-08     | PASS          |
+| AC-06-04 | ausencia de `ManyToManyField`               | EVI-06-03     | PASS          |
+| AC-06-05 | precio histórico del detalle                | EVI-06-08     | PASS          |
+
+---
+
+## ISS-07 — Serializers y JSON camelCase
+
+### Narrativa
+
+Con los modelos de negocio de HornoRaíz ya implementados y migrados, el siguiente paso consiste en crear la capa de comunicación entre el backend y el frontend. Se instaló Django REST Framework, junto con `djangorestframework-camel-case` y `django-cors-headers`. Los campos del modelo siguen en `snake_case` (`created_at`, `unit_price`, `client_id`), pero la API los expone en `camelCase` (`createdAt`, `unitPrice`, `clientId`) sin modificar los modelos ni las columnas de MySQL. La conversión ocurre solo en el borde HTTP.
+
+### Objetivo
+
+Convertir los modelos de HornoRaíz en respuestas JSON y validar los datos recibidos por la API, utilizando nombres de campos `camelCase` sin modificar los modelos existentes.
+
+### Requisitos
+
+- ISS-06 superado: modelos de venta, detalle y pago implementados.
+- Terminal con el entorno virtual `.venv` activo.
+- Modelos y migraciones de HornoRaíz disponibles.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-07-01-venv-activo.png)
+
+**2. Instalar los paquetes de la API**
+
+```bash
+python -m pip install "djangorestframework==3.17.2" "djangorestframework-camel-case==1.4.2" "django-cors-headers==4.9.0"
+python -m pip freeze > requirements.txt
+```
+
+![Instalación de paquetes](evidencias/EVI-07-02-instalacion-paquetes.png)
+
+**3. Parchear `config/settings/__init__.py`**
+
+Se agregaron `rest_framework` y `corsheaders` a `INSTALLED_APPS`, el middleware de CORS, y la configuración `REST_FRAMEWORK` con renderers y parsers en camelCase.
+
+```python
+INSTALLED_APPS = [
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "corsheaders",
+    "apps.security.apps.SecurityConfig",
+    "apps.catalog.apps.CatalogConfig",
+    "apps.production.apps.ProductionConfig",
+    "apps.sale.apps.SaleConfig",
+]
+
+MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]
+```
+
+Debajo de `DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"`:
+
+```python
+CORS_ALLOW_ALL_ORIGINS = os.environ.get("CORS_ALLOW_ALL_ORIGINS", "True").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "djangorestframework_camel_case.render.CamelCaseJSONRenderer",
+        "djangorestframework_camel_case.render.CamelCaseBrowsableAPIRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "djangorestframework_camel_case.parser.CamelCaseJSONParser",
+        "djangorestframework_camel_case.parser.CamelCaseFormParser",
+        "djangorestframework_camel_case.parser.CamelCaseMultiPartParser",
+    ],
+    "DEFAULT_PAGINATION_CLASS": None,
+}
+```
+
+![config/settings/__init__.py](evidencias/EVI-07-03-settings.png)
+
+**4. Serializers de `catalog`**
+
+Se creó `apps/catalog/serializers.py` con `ProductSerializer`, `SupplySerializer`, `RecipeSerializer`, `RecipeSupplySerializer` y `PromotionSerializer`.
+
+```python
+from rest_framework import serializers
+
+from apps.catalog.models import Product, Supply, Recipe, RecipeSupply, Promotion
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "sku",
+            "name",
+            "description",
+            "price",
+            "status",
+        ]
+        read_only_fields = ["id"]
+        extra_kwargs = {
+            "sku": {"max_length": 50},
+            "name": {"min_length": 2, "max_length": 100},
+            "description": {"required": False, "allow_null": True, "allow_blank": True},
+        }
+
+    def validate_description(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        return value
+
+
+class SupplySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Supply
+        fields = [
+            "id",
+            "code",
+            "name",
+            "unit_of_measure",
+            "min_stock",
+            "status",
+        ]
+        read_only_fields = ["id"]
+        extra_kwargs = {
+            "code": {"max_length": 50},
+            "name": {"min_length": 2, "max_length": 100},
+            "unit_of_measure": {"max_length": 30},
+        }
+
+
+class RecipeSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+
+    class Meta:
+        model = Recipe
+        fields = [
+            "id",
+            "product",
+            "product_name",
+            "name",
+            "description",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "product_name", "created_at", "updated_at"]
+        extra_kwargs = {
+            "name": {"min_length": 2, "max_length": 100},
+            "description": {"required": False, "allow_null": True, "allow_blank": True},
+        }
+
+    def validate_description(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        return value
+
+
+class RecipeSupplySerializer(serializers.ModelSerializer):
+    main_name = serializers.CharField(source="main.name", read_only=True)
+    related_name = serializers.CharField(source="related.name", read_only=True)
+
+    class Meta:
+        model = RecipeSupply
+        fields = [
+            "id",
+            "main",
+            "main_name",
+            "related",
+            "related_name",
+            "relation_data",
+            "status",
+        ]
+        read_only_fields = ["id", "main_name", "related_name"]
+        extra_kwargs = {
+            "relation_data": {"required": False, "allow_null": True, "allow_blank": True},
+        }
+
+
+class PromotionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Promotion
+        fields = [
+            "id",
+            "name",
+            "description",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+        extra_kwargs = {
+            "name": {"min_length": 2, "max_length": 100},
+            "description": {"required": False, "allow_null": True, "allow_blank": True},
+        }
+
+    def validate_description(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        return value
+```
+
+![apps/catalog/serializers.py](evidencias/EVI-07-04-catalog-serializers.png)
+
+**5. Serializers de `production`**
+
+Se creó `apps/production/serializers.py` con `ProductionBatchSerializer` y `SupplyMovementSerializer`.
+
+```python
+from rest_framework import serializers
+
+from apps.production.models import ProductionBatch, SupplyMovement
+
+
+class ProductionBatchSerializer(serializers.ModelSerializer):
+    recipe_name = serializers.CharField(source="recipe.name", read_only=True)
+
+    class Meta:
+        model = ProductionBatch
+        fields = [
+            "id",
+            "recipe",
+            "recipe_name",
+            "name",
+            "description",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "recipe_name", "created_at", "updated_at"]
+        extra_kwargs = {
+            "name": {"min_length": 2, "max_length": 100},
+            "description": {"required": False, "allow_null": True, "allow_blank": True},
+        }
+
+    def validate_description(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        return value
+
+
+class SupplyMovementSerializer(serializers.ModelSerializer):
+    supply_name = serializers.CharField(source="supply.name", read_only=True)
+    production_batch_name = serializers.CharField(
+        source="production_batch.name",
+        read_only=True,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = SupplyMovement
+        fields = [
+            "id",
+            "production_batch",
+            "production_batch_name",
+            "supply",
+            "supply_name",
+            "type",
+            "date",
+            "quantity",
+            "notes",
+            "status",
+        ]
+        read_only_fields = ["id", "supply_name", "production_batch_name"]
+        extra_kwargs = {
+            "production_batch": {"required": False, "allow_null": True},
+            "notes": {"required": False, "allow_null": True, "allow_blank": True},
+        }
+
+    def validate_notes(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        return value
+```
+
+![apps/production/serializers.py](evidencias/EVI-07-05-production-serializers.png)
+
+**6. Serializers de `sale`**
+
+Se creó `apps/sale/serializers.py` con `SaleSerializer`, `SaleDetailSerializer` y `PaymentSerializer`.
+
+```python
+from rest_framework import serializers
+
+from apps.sale.models import Sale, SaleDetail, Payment
+
+
+class SaleDetailSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+
+    class Meta:
+        model = SaleDetail
+        fields = [
+            "id",
+            "sale",
+            "product",
+            "product_name",
+            "quantity",
+            "unit_price",
+            "total",
+            "notes",
+        ]
+        read_only_fields = ["id", "product_name", "total"]
+        extra_kwargs = {
+            "notes": {"required": False, "allow_null": True, "allow_blank": True},
+        }
+
+    def validate_notes(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        return value
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "reference_type",
+            "reference_id",
+            "method",
+            "amount",
+            "date",
+            "status",
+        ]
+        read_only_fields = ["id"]
+        extra_kwargs = {
+            "reference_type": {"max_length": 50},
+            "method": {"max_length": 50},
+            "status": {"max_length": 30},
+        }
+
+
+class SaleSerializer(serializers.ModelSerializer):
+    details = SaleDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Sale
+        fields = [
+            "id",
+            "client_id",
+            "date",
+            "subtotal",
+            "taxes",
+            "total",
+            "status",
+            "details",
+        ]
+        read_only_fields = ["id", "details"]
+        extra_kwargs = {
+            "client_id": {"required": False, "allow_null": True},
+        }
+```
+
+![apps/sale/serializers.py](evidencias/EVI-07-06-sale-serializers.png)
+
+**7. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-07-07-check-ok.png)
+
+**8. Probar el camelCase en el shell**
+
+En el shell de Django hay que usar explícitamente `CamelCaseJSONRenderer()` porque el `JSONRenderer` plano no aplica la conversión. Cuando la respuesta sale por HTTP (a través de los ViewSets del ISS-08), DRF aplica automáticamente el renderer configurado.
+
+```python
+from djangorestframework_camel_case.render import CamelCaseJSONRenderer
+from apps.catalog.serializers import ProductSerializer, RecipeSerializer, PromotionSerializer
+from apps.catalog.models import Product, Recipe, Promotion
+from decimal import Decimal
+
+p = Product.objects.create(sku="ISS07-002", name="Producto ISS07-002", price=Decimal("500.00"))
+json_p = CamelCaseJSONRenderer().render(ProductSerializer(p).data).decode("utf-8")
+print("Product JSON:")
+print(json_p)
+
+r = Recipe.objects.create(product=p, name="Receta ISS07-002")
+json_r = CamelCaseJSONRenderer().render(RecipeSerializer(r).data).decode("utf-8")
+print("\nRecipe JSON:")
+print(json_r)
+assert "createdAt" in json_r
+assert "created_at" not in json_r
+print("✓ Recipe usa createdAt")
+
+promo = Promotion.objects.create(name="Promo ISS07-002")
+json_promo = CamelCaseJSONRenderer().render(PromotionSerializer(promo).data).decode("utf-8")
+print("\nPromotion JSON:")
+print(json_promo)
+assert "createdAt" in json_promo
+assert "created_at" not in json_promo
+print("✓ Promotion usa createdAt")
+```
+
+Resultado:
+```
+Product JSON:
+{"id":8,"sku":"ISS07-002","name":"Producto ISS07-002","description":null,"price":"500.00","status":true}
+
+Recipe JSON:
+{"id":6,"product":8,"productName":"Producto ISS07-002","name":"Receta ISS07-002",
+ "description":null,"status":true,"createdAt":"2026-10-12T22:07:56.548399-05:00","updatedAt":"..."}
+✓ Recipe usa createdAt
+
+Promotion JSON:
+{"id":6,"name":"Promo ISS07-002","description":null,"status":true,
+ "createdAt":"2026-10-12T22:07:56.574800-05:00","updatedAt":"..."}
+✓ Promotion usa createdAt
+```
+
+![Prueba camelCase en shell](evidencias/EVI-07-08-camelcase-test.png)
+
+### Explicación
+
+La conversión de nombres ocurre en el borde HTTP:
+
+```
+Python (created_at)  →  MySQL (created_at)  →  JSON API (createdAt)
+                                            ←  Parser (createdAt)
+```
+
+Los serializers no usan `fields = "__all__"`: cada campo que se expone en la API se declara explícitamente. Los campos derivados (`product_name`, `productName`) se declaran de solo lectura con `CharField(source="...", read_only=True)` para no requerir queries adicionales del cliente.
+
+El parser hace el camino inverso al recibir JSON. Los modelos y las columnas de MySQL permanecen en `snake_case`; no se renombran.
+
+### Criterios de aceptación
+
+- **AC-07-01:** el JSON de una receta o promoción contiene `createdAt` y no `created_at`.
+- **AC-07-02:** los serializers exponen `productName`, `unitOfMeasure`, `minStock`, `unitPrice`, `referenceType` en `camelCase`.
+- **AC-07-03:** los campos derivados (`productName`, `recipeName`) se incluyen sin requerir queries adicionales del cliente.
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py shell
+```
+
+![Check exitoso](evidencias/EVI-07-07-check-ok.png)
+
+![Prueba camelCase en shell](evidencias/EVI-07-08-camelcase-test.png)
+
+### GATE
+
+| **AC**   | **Verificación**                     | **Evidencia** | **Resultado** |
+|----------|--------------------------------------|---------------|---------------|
+| AC-07-01 | `createdAt` presente en JSON         | EVI-07-08     | PASS          |
+| AC-07-02 | campos derivados en `camelCase`      | EVI-07-04     | PASS          |
+| AC-07-03 | `productName` sin query adicional    | EVI-07-08     | PASS          |
