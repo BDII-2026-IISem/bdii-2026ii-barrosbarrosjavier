@@ -14,6 +14,7 @@ from apps.common.status import RecordStatus
 from apps.security.models import RefreshToken
 from apps.security.serializers import (
     LoginSerializer,
+    LogoutSerializer,
     RefreshSerializer,
 )
 from apps.security.tokens import generate_refresh_value, hash_token
@@ -156,3 +157,57 @@ class RefreshAPIView(APIView):
                 token_payload(stored.user, new_raw),
                 status=status.HTTP_200_OK,
             )
+
+
+class LogoutAPIView(APIView):
+    """Invalida el refresh presentado.
+
+    - Si el hash no existe -> 401.
+    - Si el token ya fue reemplazado -> revoca la familia -> 401.
+    - En cualquier otro caso -> status inactive + revoked_at = ahora -> 204.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LogoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        raw_refresh = serializer.validated_data["refresh"]
+        token_hash = hash_token(raw_refresh)
+
+        with transaction.atomic():
+            stored = (
+                RefreshToken.objects.select_for_update()
+                .filter(token_hash=token_hash)
+                .first()
+            )
+
+            if stored is None:
+                return Response(
+                    {"detail": "Refresh token invalido."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            # Si ya fue reemplazado -> reuso -> revoca la familia
+            if stored.replaced_by_id is not None:
+                RefreshToken.objects.filter(
+                    family_id=stored.family_id,
+                    status=RecordStatus.ACTIVE,
+                ).update(
+                    status=RecordStatus.INACTIVE,
+                    revoked_at=timezone.now(),
+                    updated_at=timezone.now(),
+                )
+                return Response(
+                    {"detail": "Refresh token ya reemplazado."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            # En cualquier otro caso: deja inactive ese token
+            if stored.status == RecordStatus.ACTIVE:
+                stored.status = RecordStatus.INACTIVE
+                stored.revoked_at = timezone.now()
+                stored.save(update_fields=["status", "revoked_at", "updated_at"])
+
+            return Response(status=status.HTTP_204_NO_CONTENT)

@@ -5964,3 +5964,288 @@ docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT 
 | AC-18-01 | rotación: el 2do es distinto del 1ro   | EVI-18-05     | PASS          |
 | AC-18-02 | reuso del 1ro → 401                    | EVI-18-05     | PASS          |
 | AC-18-03 | 2do también muere con la familia       | EVI-18-05     | PASS          |
+
+---
+
+## ISS-19 — Logout
+
+### Narrativa
+
+Con la rotación del refresh funcionando, el siguiente paso consiste en implementar el logout. La credencial de la sesión persistida es el refresh, no el access: cerrar sesión en un dispositivo no tiene por qué cerrar otra familia. Logout recibe `{"refresh": "..."}` y lo deja `inactive` con `revoked_at = ahora`. Si el hash no existe, responde `401`. Si el token presentado ya fue reemplazado (fue rotado en un refresh), se trata como reuso y se apaga la familia completa. Un segundo logout del mismo token, si no fue rotado, vuelve a dejarlo inactivo y responde `204`.
+
+### Objetivo
+
+Invalidar el refresh presentado sin tocar el access token.
+
+### Requisitos
+
+- ISS-18 superado: refresh con rotación funcionando.
+- `RefreshToken` con `family_id`, `replaced_by` y `revoked_at`.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-19-01-venv-activo.png)
+
+**2. Agregar `LogoutAPIView` a `apps/security/auth_views.py`**
+
+Se agregó `LogoutSerializer` al import y la clase `LogoutAPIView` al final del archivo. Los helpers `token_payload`, `issue_refresh` y `_find_user` no cambiaron.
+
+```python
+from apps.security.serializers import (
+    LoginSerializer,
+    LogoutSerializer,
+    RefreshSerializer,
+)
+
+
+class LogoutAPIView(APIView):
+    """Invalida el refresh presentado.
+
+    - Si el hash no existe -> 401.
+    - Si el token ya fue reemplazado -> revoca la familia -> 401.
+    - En cualquier otro caso -> status inactive + revoked_at = ahora -> 204.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LogoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        raw_refresh = serializer.validated_data["refresh"]
+        token_hash = hash_token(raw_refresh)
+
+        with transaction.atomic():
+            stored = (
+                RefreshToken.objects.select_for_update()
+                .filter(token_hash=token_hash)
+                .first()
+            )
+
+            if stored is None:
+                return Response(
+                    {"detail": "Refresh token invalido."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            # Si ya fue reemplazado -> reuso -> revoca la familia
+            if stored.replaced_by_id is not None:
+                RefreshToken.objects.filter(
+                    family_id=stored.family_id,
+                    status=RecordStatus.ACTIVE,
+                ).update(
+                    status=RecordStatus.INACTIVE,
+                    revoked_at=timezone.now(),
+                    updated_at=timezone.now(),
+                )
+                return Response(
+                    {"detail": "Refresh token ya reemplazado."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
+            # En cualquier otro caso: deja inactive ese token
+            if stored.status == RecordStatus.ACTIVE:
+                stored.status = RecordStatus.INACTIVE
+                stored.revoked_at = timezone.now()
+                stored.save(update_fields=["status", "revoked_at", "updated_at"])
+
+            return Response(status=status.HTTP_204_NO_CONTENT)
+```
+
+Logout no pide access token. La credencial de la sesión persistida es el refresh. Cerrar sesión en un dispositivo no tiene por qué cerrar otra familia. Si el valor presentado ya fue rotado, se trata como reuso y sí se apaga la familia: alguien está presentando un token que ya no debía existir.
+
+![apps/security/auth_views.py](evidencias/EVI-19-02-auth-views-py.png)
+
+**3. Actualizar `apps/security/urls.py`**
+
+```python
+from django.urls import path
+
+from apps.security.auth_views import LoginAPIView, LogoutAPIView, RefreshAPIView
+
+urlpatterns = [
+    path("auth/login/", LoginAPIView.as_view(), name="auth-login"),
+    path("auth/refresh/", RefreshAPIView.as_view(), name="auth-refresh"),
+    path("auth/logout/", LogoutAPIView.as_view(), name="auth-logout"),
+]
+```
+
+![apps/security/urls.py](evidencias/EVI-19-03-urls-py.png)
+
+**4. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+Resultado:
+```
+System check identified no issues (0 silenced).
+```
+
+![Check exitoso](evidencias/EVI-19-04-check-ok.png)
+
+**5. Agregar los tests**
+
+`apps/security/tests.py` con 2 tests nuevos que cubren el logout exitoso y el token desconocido.
+
+```python
+class LogoutTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user(
+            username="logout-user", email="logout@hornoraiz.test"
+        )
+
+    def test_logout_invalidates_refresh(self):
+        login = self.client.post(
+            "/api/auth/login/",
+            {"username": "logout-user", "password": PASSWORD},
+            format="json",
+        )
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
+        raw = login.data["refresh"]
+
+        logout = self.client.post(
+            "/api/auth/logout/", {"refresh": raw}, format="json"
+        )
+        self.assertEqual(logout.status_code, status.HTTP_204_NO_CONTENT)
+
+        again = self.client.post(
+            "/api/auth/refresh/", {"refresh": raw}, format="json"
+        )
+        self.assertEqual(again.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_with_unknown_token_is_401(self):
+        response = self.client.post(
+            "/api/auth/logout/",
+            {"refresh": "esto-no-es-un-refresh-valido"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+```
+
+**6. Ejecutar la suite completa**
+
+```bash
+python manage.py test apps.security
+```
+
+Resultado:
+```
+Found 22 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+......................
+----------------------------------------------------------------------
+Ran 22 tests in 14.619s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los 22 son: 6 de motor (ISS-03), 3 de `RefreshToken` (ISS-15), 5 de RBAC (ISS-16), 3 de login (ISS-17), 3 de refresh (ISS-18) y 2 de logout (ISS-19).
+
+![Tests PASS](evidencias/EVI-19-05-tests-pass.png)
+
+**7. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+# Login para obtener un refresh
+LOGIN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "HornoRaiz2026!"}')
+REFRESH=$(echo "$LOGIN" | python3 -c "import sys, json; print(json.load(sys.stdin)['refresh'])")
+
+# Logout
+curl -s -o /dev/null -w "Logout: HTTP %{http_code}\n" -X POST http://127.0.0.1:8000/api/auth/logout/ \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh\": \"$REFRESH\"}"
+
+# Refresh después del logout
+curl -s -o /dev/null -w "Refresh: HTTP %{http_code}\n" -X POST http://127.0.0.1:8000/api/auth/refresh/ \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh\": \"$REFRESH\"}"
+```
+
+Resultado:
+```
+Logout: HTTP 204
+Refresh: HTTP 401
+```
+
+![Prueba con curl](evidencias/EVI-19-06-curl.png)
+
+**8. Verificar en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, user_id, LEFT(token_hash, 16) AS hash_prefix, status, revoked_at IS NOT NULL AS revoked FROM refresh_tokens ORDER BY id DESC LIMIT 4;"
+```
+
+Resultado (fragmento):
+```
+id  user_id  hash_prefix       status    revoked
+6   1        f20835e4a8e0be43  inactive  1
+5   1        22279eef7808e534  inactive  1
+4   1        f28160d76d6b4ffd  inactive  1
+3   1        a1498575a88c0c0d  active    0
+```
+
+El token 6 es el del logout: `status = inactive` con `revoked_at` no nulo.
+
+![Token revocado](evidencias/EVI-19-07-token-revocado.png)
+
+### Explicación
+
+Logout no pide access token. La credencial de la sesión persistida es el refresh. Cerrar sesión en un dispositivo no tiene por qué cerrar otra familia. Si el valor presentado ya fue rotado, se trata como reuso y sí se apaga la familia: alguien está presentando un token que ya no debía existir.
+
+No hay tabla de access tokens que limpiar. El access sigue siendo válido hasta que expire (`ACCESS_TOKEN_LIFETIME`), pero ya no se puede renovar: eso es lo que logout invalida.
+
+```
+login  →  refresh R          fila active en refresh_tokens
+        │
+        ▼
+POST /api/auth/logout/       {refresh: R}     204
+        │
+        ▼
+POST /api/auth/refresh/      {refresh: R}     401
+```
+
+### Criterios de aceptación
+
+- **AC-19-01:** logout responde 204.
+- **AC-19-02:** ese refresh ya no puede renovar: el siguiente refresh responde 401.
+
+### Verificación
+
+```bash
+python manage.py test apps.security
+curl -X POST http://127.0.0.1:8000/api/auth/logout/ -d '{"refresh":"..."}'
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, status, revoked_at FROM refresh_tokens ORDER BY id DESC LIMIT 4;"
+```
+
+![Tests PASS](evidencias/EVI-19-05-tests-pass.png)
+
+![Prueba con curl](evidencias/EVI-19-06-curl.png)
+
+![Token revocado](evidencias/EVI-19-07-token-revocado.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-19-01 | logout responde 204                    | EVI-19-05     | PASS          |
+| AC-19-02 | refresh posterior → 401                | EVI-19-05     | PASS          |

@@ -302,3 +302,36 @@ class RefreshRotationTests(APITestCase):
             "/api/auth/refresh/", {"refresh": first}, format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+
+class LogoutTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user(username="logout-user", email="logout@hornoraiz.test")
+
+    def test_logout_invalidates_refresh(self):
+        login = self.client.post(
+            "/api/auth/login/",
+            {"username": "logout-user", "password": PASSWORD},
+            format="json",
+        )
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
+        raw = login.data["refresh"]
+
+        logout = self.client.post(
+            "/api/auth/logout/", {"refresh": raw}, format="json"
+        )
+        self.assertEqual(logout.status_code, status.HTTP_204_NO_CONTENT)
+
+        again = self.client.post(
+            "/api/auth/refresh/", {"refresh": raw}, format="json"
+        )
+        self.assertEqual(again.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_with_unknown_token_is_401(self):
+        response = self.client.post(
+            "/api/auth/logout/",
+            {"refresh": "esto-no-es-un-refresh-valido"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
