@@ -4824,3 +4824,379 @@ python manage.py test apps.security.tests.RefreshTokenTests
 | AC-15-01 | fila distinta del claro                | EVI-15-09     | PASS          |
 | AC-15-02 | hash SHA-256                           | EVI-15-09     | PASS          |
 | AC-15-03 | sin password en el JSON (ISS-16+)      | EVI-15-10     | PASS          |
+
+---
+
+## ISS-16 — Modelos de autorización RBAC
+
+### Narrativa
+
+Con el refresh token persistido, el siguiente paso consiste en modelar la matriz de autorización del sistema. Django trae `Groups` y `Permissions`, pero la pregunta que la API necesita responder es otra: dado un método HTTP y un patrón de ruta, ¿la cadena `usuario → rol → recurso` está toda activa? Esa cadena no se expresa con `auth_permission`. Se crean cuatro tablas propias: `roles`, `role_users`, `resources` y `resource_roles`. Cada una nace `inactive` por defecto, de modo que la autorización se concede a propósito, no por accidente.
+
+### Objetivo
+
+Modelar la matriz de autorización sin usar `Groups` ni `Permissions` como regla de la API, con cuatro tablas que representan la cadena `usuario → rol → recurso`.
+
+### Requisitos
+
+- ISS-15 superado.
+- `User` y `RefreshToken` ya existen en `apps/security/models.py`.
+- Entorno virtual `.venv` activo.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-16-01-venv-activo.png)
+
+**2. Agregar las clases al final de `apps/security/models.py`**
+
+Se agregaron `HttpMethod` (TextChoices) y los 4 modelos. No se reescribieron `User` ni `RefreshToken`. El archivo queda con 8 clases.
+
+```python
+class HttpMethod(models.TextChoices):
+    GET = "GET", "GET"
+    POST = "POST", "POST"
+    PUT = "PUT", "PUT"
+    PATCH = "PATCH", "PATCH"
+    DELETE = "DELETE", "DELETE"
+
+
+class Role(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    description = models.CharField(max_length=255, null=True, blank=True)
+    status = models.CharField(
+        max_length=8, choices=RecordStatus.choices, default=RecordStatus.INACTIVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "roles"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=RecordStatus.values),
+                name="roles_status_valid",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class RoleUser(models.Model):
+    role = models.ForeignKey(Role, on_delete=models.RESTRICT, related_name="assignments")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.RESTRICT, related_name="role_links",
+    )
+    status = models.CharField(
+        max_length=8, choices=RecordStatus.choices, default=RecordStatus.INACTIVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "role_users"
+        constraints = [
+            models.UniqueConstraint(fields=["role", "user"], name="role_user_unique"),
+            models.CheckConstraint(
+                condition=models.Q(status__in=RecordStatus.values),
+                name="role_users_status_valid",
+            ),
+        ]
+
+
+class Resource(models.Model):
+    name = models.CharField(max_length=150)
+    method = models.CharField(max_length=10, choices=HttpMethod.choices)
+    route = models.CharField(max_length=255)
+    status = models.CharField(
+        max_length=8, choices=RecordStatus.choices, default=RecordStatus.INACTIVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "resources"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["method", "route"], name="resource_method_route_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=RecordStatus.values),
+                name="resources_status_valid",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.method} {self.route}"
+
+
+class ResourceRole(models.Model):
+    resource = models.ForeignKey(Resource, on_delete=models.RESTRICT, related_name="grants")
+    role = models.ForeignKey(Role, on_delete=models.RESTRICT, related_name="grants")
+    status = models.CharField(
+        max_length=8, choices=RecordStatus.choices, default=RecordStatus.INACTIVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "resource_roles"
+        constraints = [
+            models.UniqueConstraint(fields=["resource", "role"], name="resource_role_unique"),
+            models.CheckConstraint(
+                condition=models.Q(status__in=RecordStatus.values),
+                name="resource_roles_status_valid",
+            ),
+        ]
+```
+
+`Resource.route` guarda el patrón (por ejemplo `api/sale/sales/<int:pk>/`), no el path con el id sustituido. El comando `seed_rbac` lo obtiene con `resolve(path).route`.
+
+![apps/security/models.py con los 4 modelos RBAC](evidencias/EVI-16-02-models-py.png)
+
+**3. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+Resultado:
+```
+System check identified no issues (0 silenced).
+```
+
+![Check exitoso](evidencias/EVI-16-03-check-ok.png)
+
+**4. Generar y aplicar la migración**
+
+```bash
+python manage.py makemigrations security
+python manage.py migrate
+```
+
+Resultado:
+```
+Migrations for 'security':
+  apps/security/migrations/0003_resource_role_resourcerole_roleuser.py
+    + Create model Resource
+    + Create model Role
+    + Create model ResourceRole
+    + Create model RoleUser
+
+Applying security.0003_resource_role_resourcerole_roleuser... OK
+```
+
+![makemigrations](evidencias/EVI-16-04-makemigrations.png)
+
+![migrate](evidencias/EVI-16-05-migrate.png)
+
+**5. Verificar las tablas en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SHOW TABLES LIKE '%role%';"
+```
+
+Resultado:
+```
+Tables_in_hornoraiz_django (%role%)
+resource_roles
+role_users
+roles
+```
+
+![Tablas role](evidencias/EVI-16-06-tablas-role.png)
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SHOW TABLES LIKE '%resource%';"
+```
+
+Resultado:
+```
+Tables_in_hornoraiz_django (%resource%)
+resource_roles
+resources
+```
+
+![Tablas resource](evidencias/EVI-16-09-tablas-resource.png)
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE resources;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE roles;"
+```
+
+Resultado (fragmento):
+```
+resources: id, name, method, route, status, created_at, updated_at
+roles:     id, name, description, status, created_at, updated_at
+```
+
+![DESCRIBE resources y roles](evidencias/EVI-16-07-describe-resources-roles.png)
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE role_users;"
+```
+
+Resultado:
+```
+Field       Type          Null  Key  Default  Extra
+id          bigint        NO    PRI  NULL     auto_increment
+status      varchar(8)    NO         NULL
+created_at  datetime(6)   NO         NULL
+updated_at  datetime(6)   NO         NULL
+role_id     bigint        NO    MUL  NULL
+user_id     bigint        NO    MUL  NULL
+```
+
+![DESCRIBE role_users](evidencias/EVI-16-10-describe-role-users.png)
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE resource_roles;"
+```
+
+Resultado:
+```
+Field        Type          Null  Key  Default  Extra
+id           bigint        NO    PRI  NULL     auto_increment
+status       varchar(8)    NO         NULL
+created_at   datetime(6)   NO         NULL
+updated_at   datetime(6)   NO         NULL
+resource_id  bigint        NO    MUL  NULL
+role_id      bigint        NO    MUL  NULL
+```
+
+![DESCRIBE resource_roles](evidencias/EVI-16-11-describe-resource-roles.png)
+
+**6. Ejecutar los tests**
+
+`apps/security/tests.py` con 5 tests que verifican el estado por defecto y las restricciones de unicidad.
+
+```python
+class RbacModelsTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="rbac-user",
+            email="rbac@example.com",
+            password="HornoRaiz2026!",
+            status=RecordStatus.ACTIVE,
+        )
+
+    def test_role_default_status_inactive(self):
+        role = Role.objects.create(name="admin")
+        self.assertEqual(role.status, RecordStatus.INACTIVE)
+
+    def test_role_user_pair_is_unique(self):
+        role = Role.objects.create(name="vendedor")
+        RoleUser.objects.create(role=role, user=self.user)
+        with self.assertRaises(IntegrityError):
+            RoleUser.objects.create(role=role, user=self.user)
+
+    def test_resource_method_route_is_unique(self):
+        Resource.objects.create(
+            name="Listar ventas",
+            method=HttpMethod.GET,
+            route="api/sale/sales/",
+        )
+        with self.assertRaises(IntegrityError):
+            Resource.objects.create(
+                name="Otra cosa",
+                method=HttpMethod.GET,
+                route="api/sale/sales/",
+            )
+
+    def test_resource_role_pair_is_unique(self):
+        role = Role.objects.create(name="cajero")
+        resource = Resource.objects.create(
+            name="Listar productos",
+            method=HttpMethod.GET,
+            route="api/catalog/products/",
+        )
+        ResourceRole.objects.create(resource=resource, role=role)
+        with self.assertRaises(IntegrityError):
+            ResourceRole.objects.create(resource=resource, role=role)
+
+    def test_full_chain_active(self):
+        role = Role.objects.create(name="admin2", status=RecordStatus.ACTIVE)
+        resource = Resource.objects.create(
+            name="Listar pagos",
+            method=HttpMethod.GET,
+            route="api/sale/payments/",
+            status=RecordStatus.ACTIVE,
+        )
+        ResourceRole.objects.create(
+            resource=resource, role=role, status=RecordStatus.ACTIVE,
+        )
+        RoleUser.objects.create(
+            role=role, user=self.user, status=RecordStatus.ACTIVE,
+        )
+        self.assertEqual(
+            RoleUser.objects.filter(
+                user=self.user, status=RecordStatus.ACTIVE
+            ).count(),
+            1,
+        )
+```
+
+```bash
+python manage.py test apps.security
+```
+
+Resultado:
+```
+Found 14 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 5.097s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los 14 tests son: 6 de selección de motor (ISS-03), 3 de `RefreshToken` (ISS-15) y 5 de la matriz RBAC (ISS-16).
+
+![Tests PASS](evidencias/EVI-16-08-tests-pass.png)
+
+### Explicación
+
+Django ya tiene grupos. La pregunta que la API necesita responder es distinta: dado un método y un patrón de ruta, ¿la cadena `usuario → rol → recurso` está toda activa? Esa cadena no se expresa con `auth_permission`.
+
+```
+User → RoleUser → Role → ResourceRole → Resource(method, route)
+```
+
+Un eslabón que nace `inactive` no autoriza. Hay que activarlo a propósito. Esa es la forma de negar por defecto también en los datos, no solo en el código.
+
+Las parejas `(role, user)`, `(resource, role)` y `(method, route)` son únicas. Las FK usan `RESTRICT`: un rol que tiene usuarios o recursos asignados no se puede borrar.
+
+### Criterios de aceptación
+
+- **AC-16-01:** las cuatro tablas existen (`roles`, `role_users`, `resources`, `resource_roles`).
+- **AC-16-02:** no se puede repetir la pareja rol-usuario ni recurso-rol.
+- **AC-16-03:** `seed_rbac` graba la ruta que `resolve()` devuelve, no el ejemplo `/api/clients/1/`. (Comando pendiente para la próxima unidad.)
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py test apps.security
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE resources;"
+```
+
+![Tests PASS](evidencias/EVI-16-08-tests-pass.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia**              | **Resultado** |
+|----------|----------------------------------------|----------------------------|---------------|
+| AC-16-01 | las 4 tablas existen                   | EVI-16-06, EVI-16-09       | PASS          |
+| AC-16-02 | UniqueConstraint en las parejas        | EVI-16-08                  | PASS          |
+| AC-16-03 | `seed_rbac` con patrón `<int:pk>`      | pendiente                  | PENDIENTE     |
