@@ -3889,3 +3889,280 @@ curl -s http://127.0.0.1:8000/api/sale/sales/2/
 | AC-12-02 | DELETE responde 204                           | EVI-12-07     | PASS          |
 | AC-12-03 | la fila `sales` sigue con `status=cancelled`  | EVI-12-07     | PASS          |
 | AC-12-04 | anulación idempotente                         | EVI-12-07     | PASS          |
+
+---
+
+## ISS-13 — Django Admin
+
+### Narrativa
+
+Con los 10 endpoints REST del catálogo, producción y ventas publicados, el siguiente paso consiste en dejar las tablas de negocio explorables en el panel de administración de Django. El admin permite ver, buscar, filtrar y ordenar las listas, y en los modelos de catálogo (clientes, productos, insumos, recetas) permite además crear y editar. Las ventas y sus líneas se inspeccionan: no se rearman desde aquí, porque el alta pasa por la API del ISS-11 (transacción con precio histórico) y la anulación por el `void()` del ISS-12. Los botones de agregar y borrar se apagan en las tablas transaccionales para que el histórico se conserve.
+
+### Objetivo
+
+Registrar los 10 modelos de negocio en el panel de administración de Django, con listas filtrables y formularios agrupados, dejando las tablas de catálogo editables y las tablas transaccionales en modo solo lectura.
+
+### Requisitos
+
+- ISS-12 superado.
+- `django.contrib.admin` dentro de `INSTALLED_APPS` (ya viene desde el ISS-00).
+- Ruta `admin/` en `config/urls.py` (ya viene desde el ISS-00).
+- Superusuario con `status = active` (creado en el ISS-03).
+
+### Construcción
+
+**1. Confirmar el entorno y el superusuario**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+
+python manage.py shell -c "from apps.security.models import User; print(User.objects.filter(is_superuser=True).values_list('username', 'email', 'status'))"
+```
+
+Resultado:
+```
+<QuerySet [('admin', 'barrosbarrosjavier@gmail.com', 'active')]>
+```
+
+![Entorno virtual activo](evidencias/EVI-13-01-venv-activo.png)
+
+![Superusuario verificado](evidencias/EVI-13-02-superusuario-verificado.png)
+
+**2. Escribir `apps/catalog/admin.py`**
+
+Se registran los 5 modelos del catálogo con `@admin.register`. Cada uno tiene `list_display`, `list_filter` y `search_fields`. `Product` y `Supply` permiten edición en línea; `Recipe` y `RecipeSupply` usan `autocomplete_fields`.
+
+```python
+from django.contrib import admin
+
+from apps.catalog.models import (
+    Product, Supply, Recipe, RecipeSupply, Promotion,
+)
+
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ("sku", "name", "price", "status")
+    list_filter = ("status",)
+    search_fields = ("sku", "name", "description")
+    list_editable = ("price", "status")
+    ordering = ("name",)
+    fieldsets = (
+        ("Información", {"fields": ("sku", "name", "description")}),
+        ("Precio", {"fields": ("price",)}),
+        ("Estado", {"fields": ("status",)}),
+    )
+
+
+@admin.register(Supply)
+class SupplyAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "unit_of_measure", "min_stock", "status")
+    list_filter = ("status", "unit_of_measure")
+    search_fields = ("code", "name")
+    list_editable = ("min_stock", "status")
+    ...
+
+
+@admin.register(Recipe)
+class RecipeAdmin(admin.ModelAdmin):
+    list_display = ("name", "product", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = ("name", "product__name", "description")
+    autocomplete_fields = ("product",)
+    readonly_fields = ("created_at", "updated_at")
+    ...
+
+
+@admin.register(RecipeSupply)
+class RecipeSupplyAdmin(admin.ModelAdmin):
+    list_display = ("main", "related", "relation_data", "status")
+    autocomplete_fields = ("main", "related")
+    ...
+
+
+@admin.register(Promotion)
+class PromotionAdmin(admin.ModelAdmin):
+    list_display = ("name", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = ("name", "description")
+    ...
+```
+
+![apps/catalog/admin.py](evidencias/EVI-13-03-catalog-admin.png)
+
+**3. Escribir `apps/production/admin.py`**
+
+```python
+from django.contrib import admin
+
+from apps.production.models import ProductionBatch, SupplyMovement
+
+
+@admin.register(ProductionBatch)
+class ProductionBatchAdmin(admin.ModelAdmin):
+    list_display = ("name", "recipe", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = ("name", "recipe__name", "description")
+    autocomplete_fields = ("recipe",)
+    ...
+
+
+@admin.register(SupplyMovement)
+class SupplyMovementAdmin(admin.ModelAdmin):
+    list_display = ("id", "production_batch", "supply", "type",
+                    "quantity", "date", "status")
+    list_filter = ("type", "status", "date")
+    search_fields = ("supply__name", "notes")
+    ordering = ("-date",)
+    date_hierarchy = "date"
+    autocomplete_fields = ("production_batch", "supply")
+    ...
+```
+
+![apps/production/admin.py](evidencias/EVI-13-04-production-admin.png)
+
+**4. Escribir `apps/sale/admin.py`**
+
+Las ventas y sus líneas se muestran en modo solo lectura. El inline `SaleDetailInline` no permite agregar ni borrar líneas. `SaleAdmin` apaga `has_add_permission` y `has_delete_permission`; `SaleDetailAdmin` también. Esto respeta la regla del ISS-11: la venta se crea con `POST /api/sale/sales/` (transacción) y se anula con `DELETE` (que llama a `void()`).
+
+```python
+from django.contrib import admin
+
+from apps.sale.models import Sale, SaleDetail, Payment
+
+
+class SaleDetailInline(admin.TabularInline):
+    model = SaleDetail
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    readonly_fields = ("product", "quantity", "unit_price", "total", "notes")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Sale)
+class SaleAdmin(admin.ModelAdmin):
+    list_display = ("id", "client_id", "date", "subtotal",
+                    "taxes", "total", "status")
+    list_filter = ("status", "date")
+    search_fields = ("client_id",)
+    date_hierarchy = "date"
+    readonly_fields = ("client_id", "date", "subtotal",
+                       "taxes", "total", "status")
+    inlines = (SaleDetailInline,)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SaleDetail)
+class SaleDetailAdmin(admin.ModelAdmin):
+    list_display = ("sale", "product", "quantity", "unit_price", "total")
+    list_filter = ("product__status",)
+    search_fields = ("sale__id", "product__name", "product__sku")
+    readonly_fields = ("sale", "product", "quantity",
+                       "unit_price", "total", "notes")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ("id", "reference_type", "reference_id",
+                    "method", "amount", "date", "status")
+    list_filter = ("status", "method", "reference_type", "date")
+    search_fields = ("reference_type", "method")
+    date_hierarchy = "date"
+    ...
+```
+
+![apps/sale/admin.py](evidencias/EVI-13-05-sale-admin.png)
+
+**5. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+Resultado:
+```
+System check identified no issues (0 silenced).
+```
+
+![Check exitoso](evidencias/EVI-13-06-check-ok.png)
+
+**6. Verificar que `/admin/` carga**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8000/admin/
+```
+
+Resultado:
+```
+HTTP 302
+```
+
+El 302 confirma que el admin está montado y redirige a la pantalla de login (`/admin/login/`). El admin usa sesión y CSRF, no `AllowAny`: no es parte de la API JSON.
+
+![admin respondiendo](evidencias/EVI-13-07-admin-curl.png)
+
+### Explicación
+
+El admin usa sesión y CSRF, no es OPEN ni JWT. Sirve para mirar y, en catálogo, para corregir datos. No reemplaza la API.
+
+```
+/admin/
+   │
+   ├── Product, Supply, Recipe, RecipeSupply, Promotion   (catálogo: edición)
+   ├── ProductionBatch, SupplyMovement                    (edición)
+   ├── Sale, SaleDetail                                   (solo lectura)
+   └── Payment                                            (edición)
+```
+
+Un DELETE del admin sobre un `Product` que ya tenga `SaleDetail` choca con `PROTECT`; Django lo bloquea con un mensaje claro. En ventas y detalles ese botón se apaga directamente: la anulación sigue siendo `DELETE /api/sale/sales/<pk>/`, que llama a `void()` y conserva el histórico.
+
+### Criterios de aceptación
+
+- **AC-13-01:** los 10 modelos están registrados con `list_display`, `list_filter` y `search_fields`.
+- **AC-13-02:** el formulario de `Product` agrupa sus campos (no pide contraseña).
+- **AC-13-03:** `Product` lista `price` (no `stock` ni `marca`).
+- **AC-13-04:** `Sale` y `SaleDetail` no se agregan ni se borran desde el admin.
+- **AC-13-05:** `python manage.py check` no se queja del `autocomplete_fields`.
+
+### Verificación
+
+```bash
+python manage.py check
+curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8000/admin/
+```
+
+![Check exitoso](evidencias/EVI-13-06-check-ok.png)
+
+![admin respondiendo](evidencias/EVI-13-07-admin-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                                  | **Evidencia** | **Resultado** |
+|----------|---------------------------------------------------|---------------|---------------|
+| AC-13-01 | 10 modelos con list_display/list_filter/search    | EVI-13-03 a 05 | PASS         |
+| AC-13-02 | fieldsets de Product                              | EVI-13-03     | PASS          |
+| AC-13-03 | Product lista `price`                             | EVI-13-03     | PASS          |
+| AC-13-04 | `has_add_permission`/`has_delete_permission`      | EVI-13-05     | PASS          |
+| AC-13-05 | `manage.py check` sin quejas                      | EVI-13-06     | PASS          |
