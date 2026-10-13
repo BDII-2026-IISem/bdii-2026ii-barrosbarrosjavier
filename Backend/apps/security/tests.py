@@ -248,3 +248,57 @@ class AuthFlowTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+
+class RefreshRotationTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user()
+
+    def _login(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "ana", "password": PASSWORD},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data["refresh"]
+
+    def test_refresh_rotates_and_reuse_revokes_family(self):
+        first = self._login()
+
+        rotated = self.client.post(
+            "/api/auth/refresh/", {"refresh": first}, format="json"
+        )
+        self.assertEqual(rotated.status_code, status.HTTP_200_OK)
+        second = rotated.data["refresh"]
+        self.assertNotEqual(first, second)
+        self.assertIn("access", rotated.data)
+        self.assertNotIn("password", rotated.data)
+
+        reused = self.client.post(
+            "/api/auth/refresh/", {"refresh": first}, format="json"
+        )
+        self.assertEqual(reused.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        after_reuse = self.client.post(
+            "/api/auth/refresh/", {"refresh": second}, format="json"
+        )
+        self.assertEqual(after_reuse.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_with_unknown_token_is_401(self):
+        response = self.client.post(
+            "/api/auth/refresh/",
+            {"refresh": "esto-no-es-un-refresh-valido"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_with_inactive_user_is_401(self):
+        first = self._login()
+        self.user.status = RecordStatus.INACTIVE
+        self.user.save()
+        response = self.client.post(
+            "/api/auth/refresh/", {"refresh": first}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

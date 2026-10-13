@@ -5545,3 +5545,422 @@ curl -X POST http://127.0.0.1:8000/api/auth/login/ -H "Content-Type: application
 | AC-17-03 | usuario inactive → 401                    | EVI-17-08     | PASS          |
 | AC-17-04 | clave mala → 401                          | EVI-17-08     | PASS          |
 | AC-17-05 | sin `password` en JSON                    | EVI-17-09     | PASS          |
+
+---
+
+## ISS-18 — Refresh con rotación
+
+### Narrativa
+
+Con el login OPEN entregando access + refresh, el siguiente paso consiste en implementar la rotación del refresh. En cada uso, el refresh viejo se marca como reemplazado y se emite uno nuevo de la misma familia (`family_id`). Si el refresh viejo se vuelve a presentar, se asume que alguien más lo tiene y se revoca toda la familia: tanto el viejo como el nuevo quedan inactivos, y el cliente legítimo tiene que volver a hacer login. Rotar sin detectar reuso dejaría vivo el token robado. Es la política del proyecto, no la blacklist de SimpleJWT.
+
+### Objetivo
+
+Rotar el refresh en cada uso y tratar la reutilización del token viejo como revocación de toda la familia.
+
+### Requisitos
+
+- ISS-17 superado: login OPEN funcionando.
+- `RefreshToken` con `family_id`, `replaced_by` y `revoked_at` (desde el ISS-15).
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-18-01-venv-activo.png)
+
+**2. Reescribir `apps/security/auth_views.py`**
+
+Se agregó `RefreshAPIView`. Los helpers `token_payload`, `issue_refresh` y `_find_user` se mantienen. `RefreshAPIView` usa `transaction.atomic()` + `select_for_update()` para que dos peticiones concurrentes no emitan el mismo par.
+
+```python
+import uuid
+
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import AccessToken
+
+from apps.common.status import RecordStatus
+from apps.security.models import RefreshToken
+from apps.security.serializers import (
+    LoginSerializer,
+    RefreshSerializer,
+)
+from apps.security.tokens import generate_refresh_value, hash_token
+
+User = get_user_model()
+
+
+def token_payload(user, raw_refresh):
+    access = AccessToken.for_user(user)
+    lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+    return {
+        "access": str(access),
+        "refresh": raw_refresh,
+        "token_type": "Bearer",
+        "access_expires_in": lifetime,
+    }
+
+
+def issue_refresh(user, family_id=None):
+    raw_refresh = generate_refresh_value()
+    stored = RefreshToken.objects.create(
+        user=user,
+        token_hash=hash_token(raw_refresh),
+        family_id=family_id or uuid.uuid4(),
+        expires_at=RefreshToken.default_expiry(),
+        status=RecordStatus.ACTIVE,
+    )
+    return stored, raw_refresh
+
+
+def _find_user(username, email):
+    if username and email:
+        return User.objects.filter(username=username, email__iexact=email).first()
+    if username:
+        return User.objects.filter(username=username).first()
+    if email:
+        return User.objects.filter(email__iexact=email).first()
+    return None
+
+
+class LoginAPIView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = _find_user(data.get("username"), data.get("email"))
+        invalid = Response(
+            {"detail": "Credenciales inválidas."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+        if user is None or user.status != RecordStatus.ACTIVE:
+            return invalid
+        if not user.check_password(data["password"]):
+            return invalid
+
+        _stored, raw_refresh = issue_refresh(user)
+        return Response(token_payload(user, raw_refresh), status=status.HTTP_200_OK)
+
+
+class RefreshAPIView(APIView):
+    """Rota el refresh y detecta reuso.
+
+    - Busca la fila por hash con select_for_update().
+    - Si ya fue rotado, revocado o inactivo -> revoca toda la familia -> 401.
+    - Si esta vencido -> inactiva ese token -> 401.
+    - Si el usuario esta inactive -> inactiva ese token -> 401.
+    - Si esta vigente -> emite otro par de la misma familia y marca el
+      anterior con replaced_by.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = RefreshSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        raw_refresh = serializer.validated_data["refresh"]
+        token_hash = hash_token(raw_refresh)
+
+        invalid = Response(
+            {"detail": "Refresh token inválido."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+        with transaction.atomic():
+            stored = (
+                RefreshToken.objects.select_for_update()
+                .select_related("user")
+                .filter(token_hash=token_hash)
+                .first()
+            )
+
+            if stored is None:
+                return invalid
+
+            # Reuso: ya rotado, ya revocado o ya inactivo -> apaga la familia
+            if (
+                stored.replaced_by_id is not None
+                or stored.revoked_at is not None
+                or stored.status != RecordStatus.ACTIVE
+            ):
+                RefreshToken.objects.filter(
+                    family_id=stored.family_id,
+                    status=RecordStatus.ACTIVE,
+                ).update(
+                    status=RecordStatus.INACTIVE,
+                    revoked_at=timezone.now(),
+                    updated_at=timezone.now(),
+                )
+                return invalid
+
+            # Vencido: apaga solo ese token
+            if stored.expires_at <= timezone.now():
+                stored.status = RecordStatus.INACTIVE
+                stored.save(update_fields=["status", "updated_at"])
+                return invalid
+
+            # Usuario inactive: apaga solo ese token
+            if stored.user.status != RecordStatus.ACTIVE:
+                stored.status = RecordStatus.INACTIVE
+                stored.save(update_fields=["status", "updated_at"])
+                return invalid
+
+            # Vigente: emite otro par de la misma familia
+            new_stored, new_raw = issue_refresh(
+                stored.user, family_id=stored.family_id
+            )
+            stored.replaced_by = new_stored
+            stored.save(update_fields=["replaced_by", "updated_at"])
+
+            return Response(
+                token_payload(stored.user, new_raw),
+                status=status.HTTP_200_OK,
+            )
+```
+
+El vencimiento no revoca la familia: un token expirado no prueba que se haya copiado.
+
+![apps/security/auth_views.py](evidencias/EVI-18-02-auth-views-py.png)
+
+**3. Actualizar `apps/security/urls.py`**
+
+```python
+from django.urls import path
+
+from apps.security.auth_views import LoginAPIView, RefreshAPIView
+
+urlpatterns = [
+    path("auth/login/", LoginAPIView.as_view(), name="auth-login"),
+    path("auth/refresh/", RefreshAPIView.as_view(), name="auth-refresh"),
+]
+```
+
+`config/urls.py` no cambia: el `include("apps.security.urls")` del ISS-17 ya entrega `api/` a esta lista.
+
+![apps/security/urls.py](evidencias/EVI-18-03-urls-py.png)
+
+**4. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+Resultado:
+```
+System check identified no issues (0 silenced).
+```
+
+![Check exitoso](evidencias/EVI-18-04-check-ok.png)
+
+**5. Agregar los tests**
+
+`apps/security/tests.py` con 3 tests nuevos que cubren la rotación, el reuso y el token desconocido.
+
+```python
+class RefreshRotationTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user()
+
+    def _login(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "ana", "password": PASSWORD},
+            format="json",
+        )
+        return response.data["refresh"]
+
+    def test_refresh_rotates_and_reuse_revokes_family(self):
+        first = self._login()
+        rotated = self.client.post(
+            "/api/auth/refresh/", {"refresh": first}, format="json"
+        )
+        self.assertEqual(rotated.status_code, status.HTTP_200_OK)
+        second = rotated.data["refresh"]
+        self.assertNotEqual(first, second)
+        self.assertIn("access", rotated.data)
+        self.assertNotIn("password", rotated.data)
+
+        reused = self.client.post(
+            "/api/auth/refresh/", {"refresh": first}, format="json"
+        )
+        self.assertEqual(reused.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        after_reuse = self.client.post(
+            "/api/auth/refresh/", {"refresh": second}, format="json"
+        )
+        self.assertEqual(after_reuse.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_with_unknown_token_is_401(self):
+        response = self.client.post(
+            "/api/auth/refresh/",
+            {"refresh": "esto-no-es-un-refresh-valido"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_with_inactive_user_is_401(self):
+        first = self._login()
+        self.user.status = RecordStatus.INACTIVE
+        self.user.save()
+        response = self.client.post(
+            "/api/auth/refresh/", {"refresh": first}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+```
+
+**6. Ejecutar la suite completa**
+
+```bash
+python manage.py test apps.security
+```
+
+Resultado:
+```
+Found 20 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+....................
+----------------------------------------------------------------------
+Ran 20 tests in 12.731s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los 20 son: 6 de motor (ISS-03), 3 de `RefreshToken` (ISS-15), 5 de RBAC (ISS-16), 3 de login (ISS-17) y 3 de refresh (ISS-18).
+
+![Tests PASS](evidencias/EVI-18-05-tests-pass.png)
+
+**7. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+# Login
+LOGIN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "HornoRaiz2026!"}')
+REFRESH_A=$(echo "$LOGIN" | python3 -c "import sys, json; print(json.load(sys.stdin)['refresh'])")
+
+# Primer refresh con A -> devuelve B
+R1=$(curl -s -X POST http://127.0.0.1:8000/api/auth/refresh/ \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh\": \"$REFRESH_A\"}")
+REFRESH_B=$(echo "$R1" | python3 -c "import sys, json; print(json.load(sys.stdin)['refresh'])")
+
+# Reuso de A -> 401
+curl -s -o /dev/null -w "Reuso A: HTTP %{http_code}\n" -X POST http://127.0.0.1:8000/api/auth/refresh/ \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh\": \"$REFRESH_A\"}"
+
+# B también murió con la familia -> 401
+curl -s -o /dev/null -w "B después del reuso: HTTP %{http_code}\n" -X POST http://127.0.0.1:8000/api/auth/refresh/ \
+  -H "Content-Type: application/json" \
+  -d "{\"refresh\": \"$REFRESH_B\"}"
+```
+
+Resultado:
+```
+=== Primer refresh con A -> devuelve B ===
+{"access":"...","refresh":"f15...","token_type":"Bearer","access_expires_in":3600}
+
+=== Reuso de A ===
+HTTP 401
+
+=== B después del reuso ===
+HTTP 401
+```
+
+![Prueba con curl](evidencias/EVI-18-06-curl.png)
+
+**8. Verificar la familia revocada en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, user_id, LEFT(token_hash, 16) AS hash_prefix, status, replaced_by_id FROM refresh_tokens ORDER BY id DESC LIMIT 6;"
+```
+
+Resultado (fragmento):
+```
+id  user_id  hash_prefix       status    replaced_by_id
+5   1        22279eef7808e534  inactive  NULL
+4   1        f28160d76d6b4ffd  inactive  5
+3   1        a1498575a88c0c0d  active    NULL
+2   1        a77004d5dce34d8b  active    NULL
+1   1        475e90fb674f9ba3  active    NULL
+```
+
+Los tokens 4 y 5 murieron por el reuso. El token 4 (A) fue reemplazado por el 5 (B) antes de ser revocado con la familia. El token 5 murió también en la misma operación.
+
+![Familia revocada](evidencias/EVI-18-07-familia-revocada.png)
+
+### Explicación
+
+Rotar sin detectar reuso deja vivo el token robado. Si el token viejo vuelve a presentarse, se asume que alguien más lo tiene y se apagan todos los de esa `family_id`, incluido el que acaba de emitirse al cliente legítimo. Ese cliente tendrá que volver a login. Es la política elegida; no es la blacklist de SimpleJWT.
+
+El vencimiento no revoca la familia: un token expirado no prueba que se haya copiado.
+
+`select_for_update()` dentro de `transaction.atomic()` evita que dos peticiones concurrentes con el mismo refresh emitan dos pares distintos.
+
+```
+login  →  refresh A
+        │
+        ▼
+POST /api/auth/refresh/   {refresh: A}     200   devuelve B, A queda replaced_by
+        │
+        ▼
+POST /api/auth/refresh/   {refresh: A}     401   reuso: se apaga la familia
+        │
+        ▼
+POST /api/auth/refresh/   {refresh: B}     401   B también murió con la familia
+```
+
+### Criterios de aceptación
+
+- **AC-18-01:** el segundo refresh es distinto del primero y el primero responde 200 la primera vez.
+- **AC-18-02:** reusar el primero responde 401.
+- **AC-18-03:** el segundo, ya comprometida la familia, también responde 401.
+
+### Verificación
+
+```bash
+python manage.py test apps.security
+curl -X POST http://127.0.0.1:8000/api/auth/refresh/ -d '{"refresh":"..."}'
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, status, replaced_by_id FROM refresh_tokens ORDER BY id DESC LIMIT 6;"
+```
+
+![Tests PASS](evidencias/EVI-18-05-tests-pass.png)
+
+![Prueba con curl](evidencias/EVI-18-06-curl.png)
+
+![Familia revocada](evidencias/EVI-18-07-familia-revocada.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-18-01 | rotación: el 2do es distinto del 1ro   | EVI-18-05     | PASS          |
+| AC-18-02 | reuso del 1ro → 401                    | EVI-18-05     | PASS          |
+| AC-18-03 | 2do también muere con la familia       | EVI-18-05     | PASS          |
