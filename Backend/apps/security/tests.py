@@ -335,3 +335,49 @@ class LogoutTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+
+class ProfileTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user(
+            username="profile-user",
+            email="profile@hornoraiz.test",
+        )
+
+    def _login_token(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "profile-user", "password": PASSWORD},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data["access"]
+
+    def test_profile_requires_token_and_rejects_inactive_user(self):
+        # Sin header -> 401
+        anonymous = self.client.get("/api/auth/profile/")
+        self.assertEqual(anonymous.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # Con access válido -> 200
+        access = self._login_token()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        profile = self.client.get("/api/auth/profile/")
+        self.assertEqual(profile.status_code, status.HTTP_200_OK)
+        self.assertEqual(profile.data["username"], "profile-user")
+        self.assertNotIn("password", profile.data)
+
+        # PATCH firstName -> 200
+        patched = self.client.patch(
+            "/api/auth/profile/",
+            {"firstName": "Ana"},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        self.assertEqual(patched.data["first_name"], "Ana")
+
+        # Usuario pasa a inactive -> el mismo Bearer da 401
+        self.user.status = RecordStatus.INACTIVE
+        self.user.save()
+        denied = self.client.get("/api/auth/profile/")
+        self.assertEqual(denied.status_code, status.HTTP_401_UNAUTHORIZED)

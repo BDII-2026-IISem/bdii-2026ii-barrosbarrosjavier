@@ -6249,3 +6249,334 @@ docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT 
 |----------|----------------------------------------|---------------|---------------|
 | AC-19-01 | logout responde 204                    | EVI-19-05     | PASS          |
 | AC-19-02 | refresh posterior → 401                | EVI-19-05     | PASS          |
+
+---
+
+## ISS-20 — Perfil JWT con token
+
+### Narrativa
+
+Con el logout publicado, el siguiente paso consiste en abrir el segundo acceso de la API: JWT con token. El perfil responde quién es el llamador. Es la capa más delgada de la Fase II: valida la firma del JWT y que el usuario siga `active`, pero no consulta la matriz RBAC. Esa consulta es el tercer acceso y llega en los ISS siguientes. Si un usuario está autenticado, lee su perfil aunque no tenga ningún rol. Si intenta llamar a un recurso de negocio sin la concesión, la respuesta será `403` (no `401`): la autenticación pasó, la autorización no.
+
+### Objetivo
+
+Responder quién es el llamador con un endpoint protegido por JWT con token, que rechaza a los usuarios inactivos y no expone el `password`.
+
+### Requisitos
+
+- ISS-19 superado: logout funcionando.
+- `User`, `RefreshToken` y serializers de `security` disponibles.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-20-01-venv-activo.png)
+
+**2. Crear `apps/security/authentication.py`**
+
+Se sustituye la clase de SimpleJWT por una subclase que relee `status` después de validar la firma. Un JWT bien firmado pero de un usuario `inactive` produce `401`.
+
+```python
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
+
+from apps.common.status import RecordStatus
+
+
+class HornoRaizJWTAuthentication(JWTAuthentication):
+    """JWT con token + verificación de status.
+
+    Rechaza al usuario cuyo status no es active aunque la firma del JWT
+    siga siendo válida. Responde 401, no 403.
+    """
+
+    def get_user(self, validated_token):
+        user = super().get_user(validated_token)
+        if user.status != RecordStatus.ACTIVE or not user.is_active:
+            raise AuthenticationFailed(
+                "El usuario no está activo.",
+                code="user_inactive",
+            )
+        return user
+```
+
+![apps/security/authentication.py](evidencias/EVI-20-02-authentication-py.png)
+
+**3. Configurar `DEFAULT_AUTHENTICATION_CLASSES` en `config/settings/__init__.py`**
+
+Dentro de `REST_FRAMEWORK`, encima de `DEFAULT_PERMISSION_CLASSES`:
+
+```python
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.security.authentication.HornoRaizJWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
+    # ... resto sin cambios
+}
+```
+
+![config/settings/__init__.py](evidencias/EVI-20-03-settings.png)
+
+**4. Agregar `ProfileSerializer` a `apps/security/serializers.py`**
+
+Se agregó al inicio del archivo. No expone `password`. `username` y `status` son de solo lectura.
+
+```python
+from rest_framework import serializers
+
+from apps.security.models import User
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    """Perfil del usuario autenticado. No expone password."""
+
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "status",
+        ]
+        read_only_fields = ["id", "username", "status"]
+
+
+# ... LoginSerializer, RefreshSerializer, LogoutSerializer, TokenPairSerializer sin cambios ...
+```
+
+![apps/security/serializers.py](evidencias/EVI-20-04-serializers-py.png)
+
+**5. Crear `apps/security/rbac_views.py`**
+
+Se crea el archivo y en este ISS solo contiene el perfil. Los viewsets de la matriz se agregan en el ISS-23.
+
+```python
+from rest_framework.generics import RetrieveUpdateAPIView
+from rest_framework.permissions import IsAuthenticated
+
+from apps.security.serializers import ProfileSerializer
+
+
+class ProfileAPIView(RetrieveUpdateAPIView):
+    """Perfil del usuario autenticado.
+
+    GET   /api/auth/profile/  -> lee el objeto request.user
+    PATCH /api/auth/profile/  -> modifica campos permitidos
+    """
+
+    serializer_class = ProfileSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_object(self):
+        return self.request.user
+```
+
+`RetrieveUpdateAPIView` es `GenericAPIView` con `retrieve` y `update`. Automatiza leer y modificar el objeto que devuelve `get_object`, y no abre POST ni DELETE. No hay `pk` en la URL: el objeto es `request.user`.
+
+![apps/security/rbac_views.py](evidencias/EVI-20-05-rbac-views-py.png)
+
+**6. Actualizar `apps/security/urls.py`**
+
+```python
+from django.urls import path
+
+from apps.security.auth_views import LoginAPIView, LogoutAPIView, RefreshAPIView
+from apps.security.rbac_views import ProfileAPIView
+
+urlpatterns = [
+    path("auth/login/", LoginAPIView.as_view(), name="auth-login"),
+    path("auth/refresh/", RefreshAPIView.as_view(), name="auth-refresh"),
+    path("auth/logout/", LogoutAPIView.as_view(), name="auth-logout"),
+    path("auth/profile/", ProfileAPIView.as_view(), name="auth-profile"),
+]
+```
+
+El perfil no entra al router del ISS-23. No tiene `pk` en la URL.
+
+![apps/security/urls.py](evidencias/EVI-20-06-urls-py.png)
+
+**7. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+Resultado:
+```
+System check identified no issues (0 silenced).
+```
+
+![Check exitoso](evidencias/EVI-20-07-check-ok.png)
+
+**8. Agregar los tests**
+
+`apps/security/tests.py` con 1 test que cubre anónimo, con token, PATCH y usuario inactive.
+
+```python
+class ProfileTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user(
+            username="profile-user",
+            email="profile@hornoraiz.test",
+        )
+
+    def _login_token(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"username": "profile-user", "password": PASSWORD},
+            format="json",
+        )
+        return response.data["access"]
+
+    def test_profile_requires_token_and_rejects_inactive_user(self):
+        # Sin header -> 401
+        anonymous = self.client.get("/api/auth/profile/")
+        self.assertEqual(anonymous.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # Con access válido -> 200
+        access = self._login_token()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        profile = self.client.get("/api/auth/profile/")
+        self.assertEqual(profile.status_code, status.HTTP_200_OK)
+        self.assertEqual(profile.data["username"], "profile-user")
+        self.assertNotIn("password", profile.data)
+
+        # PATCH firstName -> 200
+        patched = self.client.patch(
+            "/api/auth/profile/",
+            {"firstName": "Ana"},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        self.assertEqual(patched.data["first_name"], "Ana")
+
+        # Usuario pasa a inactive -> el mismo Bearer da 401
+        self.user.status = RecordStatus.INACTIVE
+        self.user.save()
+        denied = self.client.get("/api/auth/profile/")
+        self.assertEqual(denied.status_code, status.HTTP_401_UNAUTHORIZED)
+```
+
+**9. Ejecutar la suite**
+
+```bash
+python manage.py test apps.security
+```
+
+Resultado:
+```
+Found 23 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+.......................
+----------------------------------------------------------------------
+Ran 23 tests in 16.882s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los 23 son: 6 de motor (ISS-03), 3 de `RefreshToken` (ISS-15), 5 de RBAC (ISS-16), 3 de login (ISS-17), 3 de refresh (ISS-18), 2 de logout (ISS-19) y 1 de perfil (ISS-20).
+
+![Tests PASS](evidencias/EVI-20-08-tests-pass.png)
+
+**10. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+# Sin header -> 401
+curl -s -o /dev/null -w "Sin header: HTTP %{http_code}\n" http://127.0.0.1:8000/api/auth/profile/
+
+# Login para obtener access
+LOGIN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "HornoRaiz2026!"}')
+ACCESS=$(echo "$LOGIN" | python3 -c "import sys, json; print(json.load(sys.stdin)['access'])")
+
+# Con Bearer -> 200
+curl -s -H "Authorization: Bearer $ACCESS" http://127.0.0.1:8000/api/auth/profile/
+
+# PATCH firstName
+curl -s -X PATCH http://127.0.0.1:8000/api/auth/profile/ \
+  -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d '{"firstName": "Admin"}'
+```
+
+Resultado:
+```
+Sin header: HTTP 401
+
+Con Bearer:
+{"id":1,"username":"admin","email":"barrosbarrosjavier@gmail.com","firstName":"","lastName":"","status":"active"}
+
+PATCH firstName:
+{"id":1,"username":"admin","email":"barrosbarrosjavier@gmail.com","firstName":"Admin","lastName":"","status":"active"}
+```
+
+El `password` nunca aparece en la respuesta. `firstName` se guarda y se devuelve en `camelCase`.
+
+![Prueba con curl](evidencias/EVI-20-09-curl.png)
+
+### Explicación
+
+```
+Bearer access
+      │
+      ▼
+firma + vigencia
+      │
+      ▼
+User.active?
+      ├── no → 401
+      └── sí → IsAuthenticated → perfil
+```
+
+JWT con token no ejecuta `HasResourceAccess`. Un usuario autenticado lee su perfil aunque no tenga ningún rol. Si el mismo usuario llama a un recurso de negocio sin concesión, el siguiente ISS responde `403`: ahí el acceso ya es JWT con token + RBAC.
+
+`HornoRaizJWTAuthentication.get_user` rechaza al usuario cuyo `status` no es `active` aunque la firma del JWT siga siendo válida. Eso produce `401`, no `403`. El access no se persiste: no hay tabla que limpiar en logout.
+
+### Criterios de aceptación
+
+- **AC-20-01:** sin header, GET perfil responde 401.
+- **AC-20-02:** con access válido responde 200 y no incluye password.
+- **AC-20-03:** PATCH de `firstName` se guarda.
+- **AC-20-04:** si el usuario pasa a `inactive`, el mismo access responde 401.
+
+### Verificación
+
+```bash
+python manage.py test apps.security
+curl http://127.0.0.1:8000/api/auth/profile/
+```
+
+![Tests PASS](evidencias/EVI-20-08-tests-pass.png)
+
+![Prueba con curl](evidencias/EVI-20-09-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-20-01 | anónimo 401                            | EVI-20-08     | PASS          |
+| AC-20-02 | perfil 200 sin password                | EVI-20-08     | PASS          |
+| AC-20-03 | PATCH firstName                        | EVI-20-09     | PASS          |
+| AC-20-04 | usuario desactivado 401                | EVI-20-08     | PASS          |
