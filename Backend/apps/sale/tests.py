@@ -101,3 +101,60 @@ class SaleTransactionTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(Sale.objects.count(), 0)
+
+
+class SaleReadAndVoidTests(APITestCase):
+    def setUp(self):
+        self.water = Product.objects.create(
+            sku="WAT-002", name="Agua 2", price=Decimal("10.00"), status=True,
+        )
+
+    def _register_sale(self, quantity=1):
+        response = self.client.post(
+            "/api/sale/sales/",
+            {
+                "clientId": None,
+                "saleDate": timezone.now().isoformat(),
+                "taxes": "0.00",
+                "items": [{"productId": self.water.id, "quantity": quantity}],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        return response.data["id"]
+
+    def test_list_returns_the_registered_sale(self):
+        sale_id = self._register_sale()
+        response = self.client.get("/api/sale/sales/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(any(row["id"] == sale_id for row in response.data))
+
+    def test_detail_keeps_historical_price(self):
+        sale_id = self._register_sale()
+        # Cambiar el precio del producto después de vender
+        Product.objects.filter(pk=self.water.pk).update(price=Decimal("99.00"))
+        detail = self.client.get(f"/api/sale/sales/{sale_id}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["details"][0]["unit_price"], "10.00")
+
+    def test_void_cancels_sale_and_is_idempotent(self):
+        sale_id = self._register_sale(quantity=2)
+        first = self.client.delete(f"/api/sale/sales/{sale_id}/")
+        self.assertEqual(first.status_code, status.HTTP_204_NO_CONTENT)
+
+        sale = Sale.objects.get(pk=sale_id)
+        self.assertEqual(sale.status, "cancelled")
+
+        # Segunda llamada: idempotente
+        second = self.client.delete(f"/api/sale/sales/{sale_id}/")
+        self.assertEqual(second.status_code, status.HTTP_204_NO_CONTENT)
+
+        # La fila sigue existiendo
+        self.assertEqual(Sale.objects.filter(pk=sale_id).count(), 1)
+        sale.refresh_from_db()
+        self.assertEqual(sale.status, "cancelled")
+
+    def test_void_does_not_delete_sale_details(self):
+        sale_id = self._register_sale()
+        self.client.delete(f"/api/sale/sales/{sale_id}/")
+        self.assertEqual(SaleDetail.objects.filter(sale_id=sale_id).count(), 1)

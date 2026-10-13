@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 
 from apps.catalog.models import Product
 from apps.sale.managers import SaleManager
@@ -25,6 +25,16 @@ class Sale(models.Model):
 
     def __str__(self):
         return f"Venta {self.pk}"
+
+    def void(self):
+        """Anula la venta sin borrarla. Idempotente."""
+        with transaction.atomic():
+            sale = Sale.objects.select_for_update().get(pk=self.pk)
+            if sale.status == "cancelled":
+                return sale
+            sale.status = "cancelled"
+            sale.save(update_fields=["status"])
+            return sale
 
 
 class SaleDetail(models.Model):
