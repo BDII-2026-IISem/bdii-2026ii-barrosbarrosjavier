@@ -80,3 +80,32 @@ class ProductApiTests(APITestCase):
         )
         self.assertEqual(updated.status_code, status.HTTP_200_OK)
         self.assertEqual(updated.data["price"], "250.00")
+
+
+class AvailableProductApiTests(APITestCase):
+    def test_available_filter(self):
+        self.client.post(
+            "/api/catalog/products/",
+            {"sku": "AV-001", "name": "Pan activo",
+             "description": "Disponible", "price": "1000.00"},
+            format="json",
+        )
+        inactive = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "AV-002", "name": "Pan inactivo",
+             "description": "No disponible", "price": "2000.00"},
+            format="json",
+        )
+        pk = inactive.data["id"]
+        self.client.delete(f"/api/catalog/products/{pk}/")
+
+        available = self.client.get("/api/catalog/products/available/")
+        self.assertEqual(available.status_code, 200)
+        self.assertEqual(len(available.data), 1)
+        self.assertEqual(available.data[0]["sku"], "AV-001")
+
+        stored = Product.objects.get(pk=pk)
+        self.assertEqual(stored.status, False)
+
+        all_products = self.client.get("/api/catalog/products/")
+        self.assertGreaterEqual(len(all_products.data), 2)

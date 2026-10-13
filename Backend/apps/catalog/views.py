@@ -1,4 +1,5 @@
 from rest_framework import viewsets
+from rest_framework.generics import ListAPIView
 from rest_framework.permissions import AllowAny
 
 from apps.catalog.models import (
@@ -62,3 +63,13 @@ class PromotionViewSet(viewsets.ModelViewSet):
     queryset = Promotion.objects.all()
     serializer_class = PromotionSerializer
     permission_classes = [AllowAny]
+
+
+class AvailableProductListAPIView(ListAPIView):
+    """Lista solo los productos activos (status=True)."""
+
+    permission_classes = [AllowAny]
+    serializer_class = ProductSerializer
+
+    def get_queryset(self):
+        return Product.objects.filter(status=True)

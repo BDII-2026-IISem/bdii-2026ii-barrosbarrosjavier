@@ -1,5 +1,9 @@
+from decimal import Decimal
+
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from apps.catalog.models import Product
 from apps.sale.models import Sale, SaleDetail, Payment
 
 
@@ -68,3 +72,41 @@ class SaleSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "client_id": {"required": False, "allow_null": True},
         }
+
+
+class SaleItemSerializer(serializers.Serializer):
+    product_id = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(),
+        source="product",
+    )
+    quantity = serializers.IntegerField(min_value=1)
+
+
+class SaleRegisterSerializer(serializers.Serializer):
+    client_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    sale_date = serializers.DateTimeField()
+    taxes = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        required=False,
+        default=Decimal("0.00"),
+    )
+    items = SaleItemSerializer(many=True, allow_empty=False)
+
+    def create(self, validated_data):
+        items = [
+            {"product_id": item["product"].id, "quantity": item["quantity"]}
+            for item in validated_data["items"]
+        ]
+        try:
+            return Sale.objects.register(
+                client_id=validated_data.get("client_id"),
+                sale_date=validated_data["sale_date"],
+                taxes=validated_data["taxes"],
+                items=items,
+            )
+        except DjangoValidationError as exc:
+            if getattr(exc, "message_dict", None):
+                raise serializers.ValidationError(exc.message_dict) from exc
+            raise serializers.ValidationError(exc.messages) from exc

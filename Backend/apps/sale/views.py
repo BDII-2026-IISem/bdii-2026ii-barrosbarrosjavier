@@ -1,30 +1,30 @@
-from rest_framework import viewsets
+from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from apps.sale.models import Sale, SaleDetail, Payment
-from apps.sale.serializers import (
-    SaleSerializer,
-    SaleDetailSerializer,
-    PaymentSerializer,
-)
+from apps.sale.models import Sale
+from apps.sale.serializers import SaleRegisterSerializer, SaleSerializer
 
 
-class SaleViewSet(viewsets.ModelViewSet):
-    queryset = Sale.objects.prefetch_related("details").all()
-    serializer_class = SaleSerializer
+class SaleRegisterAPIView(APIView):
     permission_classes = [AllowAny]
-    lookup_value_converter = "int"
+
+    def post(self, request):
+        serializer = SaleRegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sale = serializer.save()
+        sale = Sale.objects.prefetch_related("details__product").get(pk=sale.pk)
+        return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)
 
 
-class SaleDetailViewSet(viewsets.ModelViewSet):
-    queryset = SaleDetail.objects.select_related("sale", "product").all()
-    serializer_class = SaleDetailSerializer
+class SaleCollectionAPIView(APIView):
     permission_classes = [AllowAny]
-    lookup_value_converter = "int"
 
-
-class PaymentViewSet(viewsets.ModelViewSet):
-    queryset = Payment.objects.all()
-    serializer_class = PaymentSerializer
-    permission_classes = [AllowAny]
-    lookup_value_converter = "int"
+    def post(self, request, *args, **kwargs):
+        handler = SaleRegisterAPIView()
+        handler.request = request
+        handler.format_kwarg = None
+        handler.args = ()
+        handler.kwargs = {}
+        return handler.post(request)

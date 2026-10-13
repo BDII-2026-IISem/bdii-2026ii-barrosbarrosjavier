@@ -1,10 +1,7 @@
-from rest_framework.routers import SimpleRouter
+from django.urls import path
 
-from apps.sale.views import SaleViewSet, SaleDetailViewSet, PaymentViewSet
+from apps.sale.views import SaleCollectionAPIView
 
-router = SimpleRouter(use_regex_path=False)
-router.register("sales", SaleViewSet, basename="sale")
-router.register("sale-details", SaleDetailViewSet, basename="sale-detail")
-router.register("payments", PaymentViewSet, basename="payment")
-
-urlpatterns = router.urls
+urlpatterns = [
+    path("sales/", SaleCollectionAPIView.as_view(), name="sale-collection"),
+]
