@@ -58,3 +58,55 @@ class DatabaseSelectionTests(SimpleTestCase):
         env["POSTGRES_DB"] = ""
         with self.assertRaises(ImproperlyConfigured):
             database_from_environ(env)
+
+
+import hashlib
+
+from django.test import TestCase
+
+from apps.security.models import RefreshToken, User
+from apps.security.tokens import generate_refresh_value, hash_token
+
+
+class RefreshTokenTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="rt-user",
+            email="rt@example.com",
+            password="HornoRaiz2026!",
+        )
+
+    def test_hash_matches_sha256(self):
+        raw = generate_refresh_value()
+        self.assertIsInstance(raw, str)
+        self.assertGreater(len(raw), 20)
+
+        expected = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        self.assertEqual(hash_token(raw), expected)
+        self.assertEqual(len(hash_token(raw)), 64)
+
+    def test_refresh_row_does_not_store_raw_token(self):
+        raw = generate_refresh_value()
+        token_hash = hash_token(raw)
+
+        row = RefreshToken.objects.create(
+            user=self.user,
+            token_hash=token_hash,
+            expires_at=RefreshToken.default_expiry(),
+        )
+
+        self.assertNotEqual(row.token_hash, raw)
+        self.assertEqual(row.token_hash, token_hash)
+        self.assertEqual(row.status, "active")
+        self.assertIsNone(row.revoked_at)
+        self.assertIsNone(row.replaced_by)
+
+    def test_refresh_returns_active_by_default(self):
+        raw = generate_refresh_value()
+        row = RefreshToken.objects.create(
+            user=self.user,
+            token_hash=hash_token(raw),
+            expires_at=RefreshToken.default_expiry(),
+        )
+        self.assertTrue(row.is_usable)
+        self.assertEqual(row.user, self.user)

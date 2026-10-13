@@ -4502,3 +4502,325 @@ python manage.py test apps.catalog apps.production apps.sale
 | PostgreSQL, SQL Server, Oracle | sin levantar | — | NO VERIFICADO |
 
 El GATE de negocio se considera superado para MySQL. No autoriza a decir que PostgreSQL, SQL Server u Oracle corrieron el laboratorio.
+
+---
+
+## ISS-15 — RefreshToken con hash SHA-256
+
+### Narrativa
+
+Con la Fase I cerrada, comienza la Fase II — Security. El primer paso es persistir la sesión de refresh sin guardar el token en claro. El access token es un JWT: se verifica con la firma y la expiración, así que no necesita fila en base. El refresh, en cambio, tiene que poder revocarse, así que necesita estado en la base. Guardarlo en claro permitiría usar la tabla como si fuera la sesión. En su lugar, se guarda solo su hash SHA-256. SimpleJWT se instala aquí para emitir y verificar el access token; la rotación del refresh es la del proyecto, no la de la app `token_blacklist`.
+
+### Objetivo
+
+Persistir la sesión de refresh en la tabla `refresh_tokens` sin guardar el token en claro, con un hash SHA-256 que solo se puede verificar si el cliente presenta el valor original.
+
+### Requisitos
+
+- Cierre de negocio (ISS-14) superado.
+- `User` desde el ISS-03.
+- Entorno virtual `.venv` activo.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-15-01-venv-activo.png)
+
+**2. Crear `apps/security/tokens.py`**
+
+```python
+import hashlib
+import secrets
+
+
+def generate_refresh_value():
+    """Genera un refresh token opaco (no JWT) usando secrets."""
+    return secrets.token_urlsafe(48)
+
+
+def hash_token(raw_token):
+    """Devuelve el hash SHA-256 en hexadecimal del refresh en claro."""
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+```
+
+![apps/security/tokens.py](evidencias/EVI-15-02-tokens-py.png)
+
+**3. Instalar SimpleJWT**
+
+```bash
+python -m pip install "djangorestframework-simplejwt==5.5.1"
+python -m pip freeze > requirements.txt
+```
+
+![Instalación de SimpleJWT](evidencias/EVI-15-03-instalacion-simplejwt.png)
+
+**4. Agregar `RefreshToken` a `apps/security/models.py`**
+
+Se agregó `import uuid`, `from django.conf import settings`, `from django.utils import timezone`, y la clase `RefreshToken` al final del archivo. La clase `User` no se modificó.
+
+```python
+import uuid
+
+from django.conf import settings
+from django.contrib.auth.models import AbstractUser, UserManager
+from django.db import models
+from django.utils import timezone
+
+from apps.common.status import RecordStatus
+
+
+# ... HornoRaizUserManager y User sin cambios ...
+
+
+class RefreshToken(models.Model):
+    """Refresh token opaco con estado en base de datos.
+
+    El valor en claro solo viaja al cliente. La tabla guarda su SHA-256.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.RESTRICT,
+        related_name="refresh_tokens",
+        db_column="user_id",
+    )
+    token_hash = models.CharField(max_length=64, unique=True)
+    family_id = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    replaced_by = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="replacements",
+    )
+    status = models.CharField(
+        max_length=8,
+        choices=RecordStatus.choices,
+        default=RecordStatus.ACTIVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "refresh_tokens"
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=RecordStatus.values),
+                name="refresh_tokens_status_valid",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user} {self.family_id}"
+
+    @property
+    def is_usable(self):
+        return (
+            self.status == RecordStatus.ACTIVE
+            and self.revoked_at is None
+            and self.replaced_by_id is None
+            and self.expires_at > timezone.now()
+        )
+
+    @classmethod
+    def lifetime(cls):
+        return settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"]
+
+    @classmethod
+    def default_expiry(cls):
+        return timezone.now() + cls.lifetime()
+```
+
+![apps/security/models.py con RefreshToken](evidencias/EVI-15-04-models-py.png)
+
+**5. Configurar `SIMPLE_JWT` en `config/settings/__init__.py`**
+
+Se agregó `rest_framework_simplejwt` a `INSTALLED_APPS` y el bloque `SIMPLE_JWT` al final del archivo:
+
+```python
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "UPDATE_LAST_LOGIN": True,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+}
+```
+
+**No se instala `rest_framework_simplejwt.token_blacklist`:** la rotación es la del proyecto.
+
+**6. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+Resultado:
+```
+System check identified no issues (0 silenced).
+```
+
+![Check exitoso](evidencias/EVI-15-05-check-ok.png)
+
+**7. Generar y aplicar la migración**
+
+```bash
+python manage.py makemigrations security
+python manage.py migrate
+```
+
+Resultado:
+```
+Migrations for 'security':
+  apps/security/migrations/0002_refreshtoken.py
+    + Create model RefreshToken
+
+Applying security.0002_refreshtoken... OK
+```
+
+![makemigrations](evidencias/EVI-15-06-makemigrations.png)
+
+![migrate](evidencias/EVI-15-07-migrate.png)
+
+**8. Verificar la tabla en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIBE refresh_tokens;"
+```
+
+Resultado:
+```
+Field           Type          Null  Key  Default  Extra
+id              bigint        NO    PRI  NULL     auto_increment
+token_hash      varchar(64)   NO    UNI  NULL
+family_id       char(32)      NO    MUL  NULL
+expires_at      datetime(6)   NO         NULL
+revoked_at      datetime(6)   YES        NULL
+status          varchar(8)    NO         NULL
+created_at      datetime(6)   NO         NULL
+updated_at      datetime(6)   NO         NULL
+replaced_by_id  bigint        YES   MUL  NULL
+user_id         bigint        NO    MUL  NULL
+```
+
+![Tabla refresh_tokens](evidencias/EVI-15-08-tabla-refresh-tokens.png)
+
+**9. Ejecutar los tests**
+
+`apps/security/tests.py` con 3 tests que verifican el hash, la no persistencia del claro y el estado inicial. Resultado:
+
+```bash
+python manage.py test apps.security.tests.RefreshTokenTests
+```
+
+```
+Found 3 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+...
+----------------------------------------------------------------------
+Ran 3 tests in 1.896s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+![Tests PASS](evidencias/EVI-15-09-tests-pass.png)
+
+**10. Verificar el hash en el shell**
+
+```python
+from apps.security.tokens import generate_refresh_value, hash_token
+from apps.security.models import User, RefreshToken
+
+raw = generate_refresh_value()
+print("Raw (solo cliente):", raw[:30], "...")
+user = User.objects.get(username="admin")
+row = RefreshToken.objects.create(
+    user=user,
+    token_hash=hash_token(raw),
+    expires_at=RefreshToken.default_expiry(),
+)
+print("Hash guardado:", row.token_hash)
+print("Hash es igual al raw?:", row.token_hash == raw)
+print("is_usable:", row.is_usable)
+```
+
+Resultado:
+```
+Raw (solo cliente): afwuvzjqgrsdyUElu6Laycf_g2UBi7 ...
+Hash guardado: 475e90fb674f9ba361e59b38ee0c3092409feda4019ade3b564535252153b68a
+Hash es igual al raw?: False
+is_usable: True
+```
+
+![Verificación del hash en el shell](evidencias/EVI-15-10-shell-verificacion.png)
+
+**11. Verificar en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, user_id, LEFT(token_hash, 16) AS hash_prefix, status FROM refresh_tokens;"
+```
+
+Resultado:
+```
+id  user_id  hash_prefix       status
+1   1        475e90fb674f9ba3  active
+```
+
+El `token_hash` guardado es un SHA-256 en hexadecimal (64 caracteres), no el valor en claro.
+
+![Datos en refresh_tokens](evidencias/EVI-15-11-datos-refresh-tokens.png)
+
+### Explicación
+
+El access token es un JWT. Se verifica con la firma y la expiración; no hace falta una fila en la base. El refresh tiene que poder revocarse, así que necesita estado en la base. Guardar el refresh en claro permitiría usar la tabla como si fuera la sesión. El hash no se puede invertir: hace falta el valor original que solo vio el cliente.
+
+```
+refresh en claro  --solo en la respuesta--
+        │
+        ▼
+SHA-256 → refresh_tokens.token_hash
+```
+
+El `default` de `status` en `RefreshToken` es `active` (no `inactive`): el token acaba de nacer de un login válido. El resto de entidades del negocio siguen naciendo `inactive`.
+
+No se instala `rest_framework_simplejwt.token_blacklist`. La rotación es la del proyecto: `ROTATE_REFRESH_TOKENS` y `BLACKLIST_AFTER_ROTATION` quedan en `False`.
+
+### Criterios de aceptación
+
+- **AC-15-01:** después del login hay una fila en `refresh_tokens` y su `token_hash` no es el refresh devuelto.
+- **AC-15-02:** el hash coincide con SHA-256 del valor devuelto.
+- **AC-15-03:** la respuesta no contiene `password`.
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py test apps.security.tests.RefreshTokenTests
+```
+
+![Tests PASS](evidencias/EVI-15-09-tests-pass.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-15-01 | fila distinta del claro                | EVI-15-09     | PASS          |
+| AC-15-02 | hash SHA-256                           | EVI-15-09     | PASS          |
+| AC-15-03 | sin password en el JSON (ISS-16+)      | EVI-15-10     | PASS          |
