@@ -1,3 +1,82 @@
-from django.test import TestCase
+import json
 
-# Create your tests here.
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from apps.catalog.models import Product
+
+
+class ProductApiTests(APITestCase):
+    def test_create_defaults_and_persists(self):
+        response = self.client.post(
+            "/api/catalog/products/",
+            {
+                "sku": "API-001",
+                "name": "Pan de API",
+                "description": "Producto de prueba API",
+                "price": "1500.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], True)
+        self.assertEqual(response.data["sku"], "API-001")
+
+        stored = Product.objects.get(pk=response.data["id"])
+        self.assertEqual(stored.name, "Pan de API")
+
+    def test_invalid_name_and_duplicate_sku(self):
+        invalid = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "API-002", "name": "A", "price": "100.00"},
+            format="json",
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.client.post(
+            "/api/catalog/products/",
+            {"sku": "API-003", "name": "Pan 3", "price": "100.00"},
+            format="json",
+        )
+        duplicate = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "API-003", "name": "Pan 4", "price": "200.00"},
+            format="json",
+        )
+        self.assertEqual(duplicate.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_soft_delete_keeps_the_row(self):
+        created = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "API-004", "name": "Pan 4", "price": "100.00"},
+            format="json",
+        )
+        pk = created.data["id"]
+        deleted = self.client.delete(f"/api/catalog/products/{pk}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
+        stored = Product.objects.get(pk=pk)
+        self.assertEqual(stored.status, False)
+
+    def test_list_retrieve_and_update(self):
+        created = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "API-005", "name": "Pan 5", "price": "100.00"},
+            format="json",
+        )
+        pk = created.data["id"]
+
+        listed = self.client.get("/api/catalog/products/")
+        self.assertEqual(listed.status_code, status.HTTP_200_OK)
+
+        detail = self.client.get(f"/api/catalog/products/{pk}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["name"], "Pan 5")
+
+        updated = self.client.patch(
+            f"/api/catalog/products/{pk}/",
+            {"price": "250.00"},
+            format="json",
+        )
+        self.assertEqual(updated.status_code, status.HTTP_200_OK)
+        self.assertEqual(updated.data["price"], "250.00")

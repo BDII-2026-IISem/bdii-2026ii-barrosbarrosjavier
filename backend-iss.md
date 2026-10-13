@@ -2217,3 +2217,292 @@ python manage.py shell
 | AC-07-01 | `createdAt` presente en JSON         | EVI-07-08     | PASS          |
 | AC-07-02 | campos derivados en `camelCase`      | EVI-07-04     | PASS          |
 | AC-07-03 | `productName` sin query adicional    | EVI-07-08     | PASS          |
+
+---
+
+## ISS-08 — Product con ModelViewSet
+
+### Narrativa
+
+Con los serializers del ISS-07 listos, se implementa el primer endpoint REST de HornoRaíz para la gestión de productos. Se utiliza `ModelViewSet` de Django REST Framework, que proporciona las operaciones CRUD necesarias para listar, crear, consultar, actualizar y desactivar productos sin implementar cada operación manualmente. El comportamiento personalizado consiste en evitar la eliminación física de los productos: cuando se recibe una solicitud `DELETE`, el sistema cambia el estado del producto a `False`, conservando su registro en la base de datos. La API se publica sin autenticación con `permission_classes = [AllowAny]`, porque la Fase I no tiene JWT; la seguridad llega en una fase posterior.
+
+### Objetivo
+
+Implementar y publicar el CRUD de productos de HornoRaíz mediante `ModelViewSet`, permitiendo gestionar los registros de la tabla `products` a través de una API REST y conservando el historial mediante la desactivación lógica.
+
+### Requisitos
+
+- ISS-07 superado: serializers implementados con conversión a camelCase.
+- Entorno virtual `.venv` activo.
+- Django REST Framework instalado y configurado.
+- Modelo `Product` y tabla `products` disponibles en la base `hornoraiz_django`.
+- `ProductSerializer` implementado en `apps/catalog/serializers.py`.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-08-01-venv-activo.png)
+
+**2. Escribir las vistas**
+
+`apps/catalog/views.py` con los 5 ViewSets del catálogo. En este ISS solo se conecta `ProductViewSet`; los demás se conectan en el ISS-09.
+
+```python
+from rest_framework import viewsets
+from rest_framework.permissions import AllowAny
+
+from apps.catalog.models import (
+    Product, Supply, Recipe, RecipeSupply, Promotion,
+)
+from apps.catalog.serializers import (
+    ProductSerializer, SupplySerializer, RecipeSerializer,
+    RecipeSupplySerializer, PromotionSerializer,
+)
+
+
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    permission_classes = [AllowAny]
+    lookup_value_converter = "int"
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        status_value = self.request.query_params.get("status")
+        if status_value is not None:
+            normalized = status_value.strip().lower()
+            if normalized in {"true", "1", "active"}:
+                queryset = queryset.filter(status=True)
+            elif normalized in {"false", "0", "inactive"}:
+                queryset = queryset.filter(status=False)
+        return queryset
+
+    def perform_destroy(self, instance):
+        instance.status = False
+        instance.save(update_fields=["status"])
+
+
+class SupplyViewSet(viewsets.ModelViewSet):
+    queryset = Supply.objects.all()
+    serializer_class = SupplySerializer
+    permission_classes = [AllowAny]
+
+
+class RecipeViewSet(viewsets.ModelViewSet):
+    queryset = Recipe.objects.select_related("product").all()
+    serializer_class = RecipeSerializer
+    permission_classes = [AllowAny]
+
+
+class RecipeSupplyViewSet(viewsets.ModelViewSet):
+    queryset = RecipeSupply.objects.select_related("main", "related").all()
+    serializer_class = RecipeSupplySerializer
+    permission_classes = [AllowAny]
+
+
+class PromotionViewSet(viewsets.ModelViewSet):
+    queryset = Promotion.objects.all()
+    serializer_class = PromotionSerializer
+    permission_classes = [AllowAny]
+```
+
+![apps/catalog/views.py](evidencias/EVI-08-02-catalog-views.png)
+
+**3. Crear las rutas de la app**
+
+`apps/catalog/urls.py` es nuevo. Se registra solo el recurso `products`.
+
+```python
+from rest_framework.routers import SimpleRouter
+
+from apps.catalog.views import ProductViewSet
+
+router = SimpleRouter(use_regex_path=False)
+router.register("products", ProductViewSet, basename="product")
+
+urlpatterns = router.urls
+```
+
+![apps/catalog/urls.py](evidencias/EVI-08-03-catalog-urls.png)
+
+**4. Conectar las rutas al proyecto**
+
+`config/urls.py`:
+
+```python
+from django.contrib import admin
+from django.urls import include, path
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("api/catalog/", include("apps.catalog.urls")),
+]
+```
+
+![config/urls.py](evidencias/EVI-08-04-config-urls.png)
+
+Las rutas quedan en:
+- `GET/POST /api/catalog/products/`
+- `GET/PUT/PATCH/DELETE /api/catalog/products/<int:pk>/`
+
+**5. Escribir los tests**
+
+`apps/catalog/tests.py` con 4 tests que cubren el CRUD completo.
+
+```python
+import json
+
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from apps.catalog.models import Product
+
+
+class ProductApiTests(APITestCase):
+    def test_create_defaults_and_persists(self):
+        response = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "API-001", "name": "Pan de API",
+             "description": "Producto de prueba API", "price": "1500.00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["status"], True)
+        stored = Product.objects.get(pk=response.data["id"])
+        self.assertEqual(stored.name, "Pan de API")
+
+    def test_invalid_name_and_duplicate_sku(self):
+        invalid = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "API-002", "name": "A", "price": "100.00"},
+            format="json",
+        )
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+        ...
+
+    def test_soft_delete_keeps_the_row(self):
+        created = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "API-004", "name": "Pan 4", "price": "100.00"},
+            format="json",
+        )
+        pk = created.data["id"]
+        deleted = self.client.delete(f"/api/catalog/products/{pk}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+        stored = Product.objects.get(pk=pk)
+        self.assertEqual(stored.status, False)
+
+    def test_list_retrieve_and_update(self):
+        ...
+```
+
+![apps/catalog/tests.py](evidencias/EVI-08-05-catalog-tests.png)
+
+**6. Ejecutar los tests**
+
+```bash
+python manage.py test apps.catalog
+```
+
+Resultado:
+```
+Found 4 test(s).
+System check identified no issues (0 silenced).
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.162s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+![Tests PASS](evidencias/EVI-08-06-tests-pass.png)
+
+**7. Probar el endpoint en vivo**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+curl http://127.0.0.1:8000/api/catalog/products/
+```
+
+Resultado (fragmento):
+```json
+[{"id":1,"sku":"TEST-001","name":"Pan de prueba","description":null,"price":"1000.00","status":true},
+ {"id":3,"sku":"TEST-002","name":"Pan de prueba 2",...},
+ {"id":5,"sku":"TEST-003","name":"Pan de prueba 3",...},
+ ...]
+```
+
+La conversión camelCase se aplica de forma automática porque los renderers de DRF están configurados en `settings`. Los campos `created_at` aparecerían como `createdAt` si el modelo `Product` tuviera timestamps (en `recipes` y `promotions` sí se aplican).
+
+![Prueba con curl](evidencias/EVI-08-07-curl.png)
+
+### Explicación
+
+`ModelViewSet` de DRF proporciona las operaciones `list`, `create`, `retrieve`, `update`, `partial_update` y `destroy`. En HornoRaíz se utiliza para implementar el CRUD de productos asociado al modelo `Product` y a la tabla `products`.
+
+El comportamiento personalizado consiste en realizar una **baja lógica**: cuando se solicita eliminar un producto, su estado cambia a `False`, pero el registro permanece en la base de datos. Se sobrescribe `perform_destroy()` para cambiar el estado en lugar de eliminar físicamente.
+
+`SimpleRouter` genera las rutas:
+
+```
+products/              list, create
+products/<int:pk>/     retrieve, update, partial_update, destroy
+```
+
+La opción `use_regex_path=False` usa convertidores de path de Django. `lookup_value_converter = "int"` convierte el identificador a entero. `basename="product"` nombra las rutas (`product-list`, `product-detail`).
+
+```
+GET/POST /api/catalog/products/
+GET/PUT/PATCH/DELETE /api/catalog/products/<int:pk>/
+        │
+        ▼
+   ProductViewSet
+        │
+        ▼
+   ProductSerializer
+        │
+        ▼
+   products
+```
+
+El query `?status=true` filtra por productos activos; `?status=false` filtra los inactivos. Sin query se listan todos.
+
+### Criterios de aceptación
+
+- **AC-08-01:** un POST válido responde 201.
+- **AC-08-02:** el registro queda en la tabla `products`.
+- **AC-08-03:** DELETE responde 204 y la fila sigue con `status = False`.
+- **AC-08-04:** un cuerpo inválido (nombre corto, sku duplicado) responde 400.
+
+### Verificación
+
+```bash
+python manage.py test apps.catalog
+curl http://127.0.0.1:8000/api/catalog/products/
+```
+
+![Tests PASS](evidencias/EVI-08-06-tests-pass.png)
+
+![Prueba con curl](evidencias/EVI-08-07-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                     | **Evidencia** | **Resultado** |
+|----------|--------------------------------------|---------------|---------------|
+| AC-08-01 | POST responde 201                    | EVI-08-06     | PASS          |
+| AC-08-02 | `Product.objects.get` encuentra fila | EVI-08-06     | PASS          |
+| AC-08-03 | DELETE lógico, fila con status=False | EVI-08-06     | PASS          |
+| AC-08-04 | nombre corto / sku duplicado = 400   | EVI-08-06     | PASS          |
