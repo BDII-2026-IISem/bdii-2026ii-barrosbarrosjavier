@@ -5200,3 +5200,348 @@ docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; DESCRIB
 | AC-16-01 | las 4 tablas existen                   | EVI-16-06, EVI-16-09       | PASS          |
 | AC-16-02 | UniqueConstraint en las parejas        | EVI-16-08                  | PASS          |
 | AC-16-03 | `seed_rbac` con patrón `<int:pk>`      | pendiente                  | PENDIENTE     |
+
+---
+
+## ISS-17 — Login OPEN
+
+### Narrativa
+
+Con la matriz RBAC modelada, comienza la construcción de los tres accesos de la API. El primero es OPEN: `/api/auth/login/` no requiere JWT (todavía no existe el access). Demuestra identidad por `username` o por `email` y devuelve un `access` (JWT, 60 minutos) más un `refresh` (opaco, 1 día, guardado como hash SHA-256 en `refresh_tokens`). Los tres casos de fallo —usuario inexistente, usuario inactivo, clave incorrecta— responden el mismo `401 Credenciales inválidas`, sin revelar cuál de los tres falló.
+
+### Objetivo
+
+Implementar el endpoint de login OPEN que autentica por `username` o `email` y entrega access + refresh sin guardar el refresh en claro.
+
+### Requisitos
+
+- ISS-16 superado (matriz RBAC modelada).
+- `RefreshToken` y `User` disponibles en `apps/security/models.py`.
+- `SIMPLE_JWT` configurado desde el ISS-15.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-17-01-venv-activo.png)
+
+**2. Crear `apps/security/serializers.py`**
+
+```python
+from rest_framework import serializers
+
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField(required=False, allow_blank=False)
+    email = serializers.EmailField(required=False)
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if not attrs.get("username") and not attrs.get("email"):
+            raise serializers.ValidationError(
+                "Informe username o email junto con password."
+            )
+        return attrs
+
+
+class RefreshSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField()
+
+
+class TokenPairSerializer(serializers.Serializer):
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+    token_type = serializers.CharField()
+    access_expires_in = serializers.IntegerField()
+```
+
+`RefreshSerializer`, `LogoutSerializer` y `TokenPairSerializer` se usan en los ISS-18, ISS-19 e ISS-20.
+
+![apps/security/serializers.py](evidencias/EVI-17-02-serializers-py.png)
+
+**3. Crear `apps/security/auth_views.py`**
+
+```python
+import uuid
+
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from rest_framework import status
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import AccessToken
+
+from apps.common.status import RecordStatus
+from apps.security.models import RefreshToken
+from apps.security.serializers import LoginSerializer
+from apps.security.tokens import generate_refresh_value, hash_token
+
+User = get_user_model()
+
+
+def token_payload(user, raw_refresh):
+    access = AccessToken.for_user(user)
+    lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+    return {
+        "access": str(access),
+        "refresh": raw_refresh,
+        "token_type": "Bearer",
+        "access_expires_in": lifetime,
+    }
+
+
+def issue_refresh(user, family_id=None):
+    raw_refresh = generate_refresh_value()
+    stored = RefreshToken.objects.create(
+        user=user,
+        token_hash=hash_token(raw_refresh),
+        family_id=family_id or uuid.uuid4(),
+        expires_at=RefreshToken.default_expiry(),
+        status=RecordStatus.ACTIVE,
+    )
+    return stored, raw_refresh
+
+
+def _find_user(username, email):
+    if username and email:
+        return User.objects.filter(username=username, email__iexact=email).first()
+    if username:
+        return User.objects.filter(username=username).first()
+    if email:
+        return User.objects.filter(email__iexact=email).first()
+    return None
+
+
+class LoginAPIView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = _find_user(data.get("username"), data.get("email"))
+        invalid = Response(
+            {"detail": "Credenciales inválidas."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+        if user is None or user.status != RecordStatus.ACTIVE:
+            return invalid
+        if not user.check_password(data["password"]):
+            return invalid
+
+        _stored, raw_refresh = issue_refresh(user)
+        return Response(token_payload(user, raw_refresh), status=status.HTTP_200_OK)
+```
+
+`authentication_classes = []` evita que un Bearer vencido rechace el login antes de leer el cuerpo. El access sale de SimpleJWT (`AccessToken.for_user`), no se persiste. El refresh se guarda como hash SHA-256.
+
+![apps/security/auth_views.py](evidencias/EVI-17-03-auth-views-py.png)
+
+**4. Crear `apps/security/urls.py`**
+
+```python
+from django.urls import path
+
+from apps.security.auth_views import LoginAPIView
+
+urlpatterns = [
+    path("auth/login/", LoginAPIView.as_view(), name="auth-login"),
+]
+```
+
+![apps/security/urls.py](evidencias/EVI-17-04-urls-py.png)
+
+**5. Actualizar `config/urls.py`**
+
+Se agregó el `include("apps.security.urls")` bajo `api/`. Las rutas completas quedan: `POST /api/auth/login/`.
+
+```python
+urlpatterns = [
+    # ... admin, schema, catálogo, producción, ventas ...
+    path("api/", include("apps.security.urls")),
+]
+```
+
+![config/urls.py](evidencias/EVI-17-05-config-urls.png)
+
+**6. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-17-06-check-ok.png)
+
+**7. Crear `apps/common/testing.py`**
+
+Helpers para los tests que crean usuarios activos y, en ISS-22, otorgan permisos RBAC.
+
+```python
+from apps.common.status import RecordStatus
+from apps.security.models import User
+
+PASSWORD = "HornoRaiz-Test-1"
+
+
+def create_active_user(username="ana", email="ana@hornoraiz.test", password=PASSWORD):
+    return User.objects.create_user(
+        username=username,
+        email=email,
+        password=password,
+        status=RecordStatus.ACTIVE,
+    )
+```
+
+![apps/common/testing.py](evidencias/EVI-17-07-common-testing-py.png)
+
+**8. Ejecutar los tests**
+
+```bash
+python manage.py test apps.security
+```
+
+Resultado:
+```
+Found 17 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+.................
+----------------------------------------------------------------------
+Ran 17 tests in 9.012s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los 17 son: 6 de motor (ISS-03), 3 de `RefreshToken` (ISS-15), 5 de RBAC (ISS-16) y 3 de login (ISS-17).
+
+![Tests PASS](evidencias/EVI-17-08-tests-pass.png)
+
+**9. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+# Login por username
+curl -s -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "HornoRaiz2026!"}' | head -c 400
+
+# Login por email
+curl -s -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"email": "barrosbarrosjavier@gmail.com", "password": "HornoRaiz2026!"}' | head -c 400
+
+# Clave mala → 401
+curl -s -o /dev/null -w "HTTP %{http_code}\n" -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "WrongPass!"}'
+```
+
+Resultado (fragmento):
+```json
+// Login por username
+{"access":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...","refresh":"ot s6FCgidmZIQqdbS1nYC7BTv9jo3YlvmVTNBPmhzCyiJh8IPGZ6jn7YBIK",
+ "tokenType":"Bearer","accessExpiresIn":3600}
+
+// Login por email
+{"access":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...","refresh":"...","tokenType":"Bearer","accessExpiresIn":3600}
+
+// Clave mala
+HTTP 401
+```
+
+La API responde en camelCase (`tokenType`, `accessExpiresIn`). El JSON no contiene `password`.
+
+![Prueba con curl](evidencias/EVI-17-09-curl.png)
+
+**10. Verificar las filas en `refresh_tokens`**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT id, user_id, LEFT(token_hash, 16) AS hash_prefix, status FROM refresh_tokens;"
+```
+
+Resultado:
+```
+id  user_id  hash_prefix       status
+1   1        475e90fb674f9ba3  active
+2   1        a77004d5dce34d8b  active
+3   1        a1498575a88c0c0d  active
+```
+
+Cada login crea una fila nueva en `refresh_tokens` con su hash SHA-256.
+
+![Filas en refresh_tokens](evidencias/EVI-17-10-refresh-tokens-mysql.png)
+
+### Explicación
+
+Es `APIView` porque el flujo no es un alta de `User` (crear el usuario es otro endpoint y exige RBAC). Login consulta `users` y escribe `refresh_tokens`: es OPEN, y aun así toca tablas de seguridad.
+
+Vaciar `authentication_classes` evita que un Bearer vencido, enviado por costumbre, rechace el login antes de leer el cuerpo.
+
+El access sale de SimpleJWT. No se persiste. Dura 60 minutos (`ACCESS_TOKEN_LIFETIME`). El refresh se guarda como SHA-256 en `refresh_tokens.token_hash` y solo viaja en claro al cliente en la respuesta.
+
+```
+POST /api/auth/login/
+        │
+        ▼
+username o email
+        │
+        ▼
+¿user active?
+        │
+        ▼
+check_password()
+        │
+        ├── no → 401 "Credenciales inválidas."
+        └── sí → AccessToken.for_user + hash del refresh
+```
+
+Usuario inexistente, inactivo o clave mala responden el mismo 401. No se dice cuál de los tres falló.
+
+### Criterios de aceptación
+
+- **AC-17-01:** username y password correctos responden 200 con access y refresh.
+- **AC-17-02:** el email en otro caso también entra.
+- **AC-17-03:** usuario inactive responde 401.
+- **AC-17-04:** clave incorrecta responde 401.
+- **AC-17-05:** el JSON no trae password.
+
+### Verificación
+
+```bash
+python manage.py test apps.security
+curl -X POST http://127.0.0.1:8000/api/auth/login/ -H "Content-Type: application/json" -d '{"username":"admin","password":"HornoRaiz2026!"}'
+```
+
+![Tests PASS](evidencias/EVI-17-08-tests-pass.png)
+
+![Prueba con curl](evidencias/EVI-17-09-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                          | **Evidencia** | **Resultado** |
+|----------|-------------------------------------------|---------------|---------------|
+| AC-17-01 | login con username → 200 + access+refresh | EVI-17-08     | PASS          |
+| AC-17-02 | login con email → 200                     | EVI-17-08     | PASS          |
+| AC-17-03 | usuario inactive → 401                    | EVI-17-08     | PASS          |
+| AC-17-04 | clave mala → 401                          | EVI-17-08     | PASS          |
+| AC-17-05 | sin `password` en JSON                    | EVI-17-09     | PASS          |

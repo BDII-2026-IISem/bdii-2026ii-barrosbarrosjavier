@@ -177,3 +177,74 @@ class RbacModelsTests(TestCase):
             ).count(),
             1,
         )
+
+
+# ----------------- ISS-17: Login OPEN -----------------
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from apps.common.testing import PASSWORD, create_active_user
+
+
+class AuthFlowTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user()
+
+    def test_login_with_username_and_email(self):
+        # Login por username
+        by_username = self.client.post(
+            "/api/auth/login/",
+            {"username": "ana", "password": PASSWORD},
+            format="json",
+        )
+        self.assertEqual(by_username.status_code, status.HTTP_200_OK)
+        self.assertIn("access", by_username.data)
+        self.assertIn("refresh", by_username.data)
+        self.assertNotIn("password", by_username.data)
+        self.assertEqual(by_username.data["token_type"], "Bearer")
+        self.assertIn("access_expires_in", by_username.data)
+
+        # El hash del refresh está guardado
+        stored = RefreshToken.objects.get()
+        self.assertEqual(
+            stored.token_hash,
+            hash_token(by_username.data["refresh"]),
+        )
+
+        # Login por email (case-insensitive)
+        by_email = self.client.post(
+            "/api/auth/login/",
+            {"email": "ANA@hornoraiz.test", "password": PASSWORD},
+            format="json",
+        )
+        self.assertEqual(by_email.status_code, status.HTTP_200_OK)
+
+    def test_inactive_user_and_bad_password_are_401(self):
+        # Usuario inactive
+        self.user.status = RecordStatus.INACTIVE
+        self.user.save()
+        inactive = self.client.post(
+            "/api/auth/login/",
+            {"username": "ana", "password": PASSWORD},
+            format="json",
+        )
+        self.assertEqual(inactive.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # Usuario activo + clave mala
+        self.user.status = RecordStatus.ACTIVE
+        self.user.save()
+        bad_password = self.client.post(
+            "/api/auth/login/",
+            {"username": "ana", "password": "WrongPassword-123!"},
+            format="json",
+        )
+        self.assertEqual(bad_password.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_login_requires_username_or_email(self):
+        # Sin username ni email
+        response = self.client.post(
+            "/api/auth/login/",
+            {"password": PASSWORD},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
