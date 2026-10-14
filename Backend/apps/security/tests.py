@@ -183,7 +183,7 @@ class RbacModelsTests(TestCase):
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.common.testing import PASSWORD, create_active_user, grant_crud
+from apps.common.testing import PASSWORD, create_active_user, grant_crud, grant
 
 
 class AuthFlowTests(APITestCase):
@@ -649,3 +649,88 @@ class SecurityMatrixApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(denied_post.status_code, status.HTTP_403_FORBIDDEN)
+
+
+
+# ----------------- ISS-25: pruebas 401 y 403 -----------------
+class RbacTests(APITestCase):
+    """Deja por escrito la diferencia entre 401 y 403.
+
+    - 401 = la petición no demostró una identidad vigente.
+    - 403 = la identidad está vigente y la operación no está concedida.
+    """
+
+    def setUp(self):
+        self.user = create_active_user(
+            username="rbac-401-403",
+            email="rbac-401-403@hornoraiz.test",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_missing_grant_is_403_and_missing_identity_is_401(self):
+        # Autenticado sin concesión -> 403
+        denied = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Sin identidad -> 401
+        self.client.force_authenticate(user=None)
+        self.client.credentials()
+        anonymous = self.client.get("/api/catalog/products/")
+        self.assertEqual(anonymous.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_any_inactive_link_denies(self):
+        # Conceder GET /api/catalog/products/ al user
+        grant(self.user, "GET", "/api/catalog/products/")
+
+        # Con la concesión activa -> 200
+        allowed = self.client.get("/api/catalog/products/")
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+
+        # 1. Apagar el Role -> 403
+        role = Role.objects.filter(
+            assignments__user=self.user,
+            grants__resource__method="GET",
+            grants__resource__route="api/catalog/products/",
+        ).first()
+        self.assertIsNotNone(role)
+        role.status = RecordStatus.INACTIVE
+        role.save(update_fields=["status", "updated_at"])
+        denied = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Reactivar el rol
+        role.status = RecordStatus.ACTIVE
+        role.save(update_fields=["status", "updated_at"])
+
+        # 2. Apagar el RoleUser -> 403
+        role_user = RoleUser.objects.get(role=role, user=self.user)
+        role_user.status = RecordStatus.INACTIVE
+        role_user.save(update_fields=["status", "updated_at"])
+        denied = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Reactivar el RoleUser
+        role_user.status = RecordStatus.ACTIVE
+        role_user.save(update_fields=["status", "updated_at"])
+
+        # 3. Apagar el ResourceRole -> 403
+        resource_role = ResourceRole.objects.get(
+            role=role,
+            resource__method="GET",
+            resource__route="api/catalog/products/",
+        )
+        resource_role.status = RecordStatus.INACTIVE
+        resource_role.save(update_fields=["status", "updated_at"])
+        denied = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Reactivar el ResourceRole
+        resource_role.status = RecordStatus.ACTIVE
+        resource_role.save(update_fields=["status", "updated_at"])
+
+        # 4. Apagar el Resource -> 403
+        resource = resource_role.resource
+        resource.status = RecordStatus.INACTIVE
+        resource.save(update_fields=["status", "updated_at"])
+        denied = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)

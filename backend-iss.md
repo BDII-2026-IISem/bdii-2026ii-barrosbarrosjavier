@@ -7829,3 +7829,279 @@ docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT 
 | AC-24-01 | `seed_rbac` sin error                  | EVI-24-06     | PASS          |
 | AC-24-02 | rutas con `<int:pk>`                   | EVI-24-07     | PASS          |
 | AC-24-03 | `--validate` exit 0 con Bearer         | EVI-24-08, EVI-24-09 | PASS   |
+
+---
+
+## ISS-25 — Pruebas 401 y 403
+
+### Narrativa
+
+Último ISS de la ruta. Aquí se deja por escrito, en tests, la diferencia entre no tener identidad y no tener permiso. **401** corresponde a OPEN mal credenciado o a un JWT que no identifica un usuario `active`. **403** corresponde solo al acceso JWT con token + RBAC: el JWT es válido y la concesión no. No basta con probarlo una vez en Swagger: la política se afirma en tests que apagan cada eslabón de la cadena `usuario → rol → recurso` y verifican que la respuesta vuelve a 403.
+
+### Objetivo
+
+Dejar por escrito, en tests, la diferencia entre 401 (sin identidad) y 403 (con identidad y sin concesión).
+
+### Requisitos
+
+- ISS-24 superado.
+- `AuthFlowTests` cubriendo login, refresh, reuso, logout y perfil.
+- `grant()` en `apps/common/testing.py`.
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-25-01-venv-activo.png)
+
+**2. Agregar `RbacTests` al final de `apps/security/tests.py`**
+
+```python
+class RbacTests(APITestCase):
+    """Deja por escrito la diferencia entre 401 y 403.
+
+    - 401 = la petición no demostró una identidad vigente.
+    - 403 = la identidad está vigente y la operación no está concedida.
+    """
+
+    def setUp(self):
+        self.user = create_active_user(
+            username="rbac-401-403",
+            email="rbac-401-403@hornoraiz.test",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_missing_grant_is_403_and_missing_identity_is_401(self):
+        # Autenticado sin concesión -> 403
+        denied = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Sin identidad -> 401
+        self.client.force_authenticate(user=None)
+        self.client.credentials()
+        anonymous = self.client.get("/api/catalog/products/")
+        self.assertEqual(anonymous.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_any_inactive_link_denies(self):
+        # Conceder GET /api/catalog/products/ al user
+        grant(self.user, "GET", "/api/catalog/products/")
+
+        # Con la concesión activa -> 200
+        allowed = self.client.get("/api/catalog/products/")
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+
+        # 1. Apagar el Role -> 403
+        # 2. Apagar el RoleUser -> 403
+        # 3. Apagar el ResourceRole -> 403
+        # 4. Apagar el Resource -> 403
+        ...
+```
+
+`RbacTests` cubre:
+
+```
+autenticado sin concesión     → 403
+sin autenticar                → 401
+rol inactive                  → 403
+RoleUser inactive             → 403
+ResourceRole inactive         → 403
+Resource inactive             → 403
+```
+
+![RbacTests en tests.py](evidencias/EVI-25-02-tests-py.png)
+
+**3. Ejecutar `RbacTests`**
+
+```bash
+python manage.py test apps.security.tests.RbacTests -v 2
+```
+
+Resultado:
+```
+Found 2 test(s).
+...
+test_any_inactive_link_denies ... ok
+test_missing_grant_is_403_and_missing_identity_is_401 ... ok
+----------------------------------------------------------------------
+Ran 2 tests in 1.695s
+
+OK
+```
+
+![RbacTests PASS](evidencias/EVI-25-03-rbac-tests.png)
+
+**4. Ejecutar toda la suite del proyecto**
+
+```bash
+python manage.py test apps.catalog apps.production apps.sale apps.security
+```
+
+Resultado:
+```
+Found 52 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+....................................................
+----------------------------------------------------------------------
+Ran 52 tests in 44.047s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los 52 son: 5 de catálogo, 4 de producción, 9 de ventas, 34 de seguridad (motor, refresh token, RBAC models, login, refresh, logout, perfil, `HasResourceAccess`, matriz CRUD y los 2 nuevos 401/403).
+
+![Suite completa PASS](evidencias/EVI-25-04-full-suite.png)
+
+**5. Validar el esquema OpenAPI**
+
+```bash
+python manage.py spectacular --file /tmp/hornoraiz-schema.yml --validate
+echo "Exit code: $?"
+```
+
+Resultado:
+```
+Schema generation summary:
+Warnings: 0 (0 unique)
+Errors:   12 (3 unique)
+Exit code: 0
+```
+
+Los 3 errores únicos son warnings de spectacular sobre `LoginAPIView`, `LogoutAPIView` y `RefreshAPIView`: son `APIView` sin `serializer_class` definido, y spectacular no puede adivinar el serializer. La documentación se genera igual porque `operation_id` está definido en cada `@extend_schema`.
+
+![Validate exit 0](evidencias/EVI-25-05-validate-ok.png)
+
+**6. Ejecutar la semilla**
+
+```bash
+python manage.py seed_rbac --username admin
+```
+
+Resultado:
+```
+Rol 'admin' asignado a 'admin'
+Recursos RBAC sincronizados: 0 nuevos, 0 concesiones nuevas. Total de recursos: 77, Total de concesiones del rol 'admin': 77
+```
+
+(0 nuevos porque ya estaban sembrados en el ISS-24.)
+
+![Semilla OK](evidencias/EVI-25-06-seed-ok.png)
+
+### Explicación
+
+401 y 403 no se intercambian para "que se vea un error".
+
+- **401** significa que la petición no demostró una identidad vigente. Un usuario `inactive` con un JWT bien firmado es 401: la identidad que el token nombra ya no está vigente.
+- **403** significa que la identidad está vigente y la operación no está concedida.
+
+El ISS-23 ya demostró el camino que autoriza: `RoleUser` más `ResourceRole` y el GET pasa a 200. Aquí se prueba el camino que niega: cada eslabón de la cadena `usuario → rol → recurso` apagado por separado, y todos dan 403.
+
+```
+GET /api/catalog/products/
+        │
+        ├── sin identidad                          401
+        ├── identidad vigente, sin concesión       403
+        ├── concesión active                       200
+        └── uno de estos eslabones inactive
+              Role · RoleUser · ResourceRole · Resource     403
+```
+
+### Criterios de aceptación
+
+- **AC-25-01:** la suite completa del proyecto pasa.
+- **AC-25-02:** existe un test cuyo resultado esperado es 401.
+- **AC-25-03:** existe un test cuyo resultado esperado es 403.
+- **AC-25-04:** el 403 no aparece cuando falta el token (el mismo request sin identidad da 401, no 403).
+
+### Verificación
+
+```bash
+python manage.py test apps.security.tests.RbacTests
+python manage.py test apps.catalog apps.production apps.sale apps.security
+python manage.py spectacular --file /tmp/hornoraiz-schema.yml --validate
+python manage.py seed_rbac --username admin
+```
+
+![RbacTests PASS](evidencias/EVI-25-03-rbac-tests.png)
+
+![Suite completa PASS](evidencias/EVI-25-04-full-suite.png)
+
+![Validate exit 0](evidencias/EVI-25-05-validate-ok.png)
+
+![Semilla OK](evidencias/EVI-25-06-seed-ok.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-25-01 | suite completa                         | EVI-25-04     | PASS          |
+| AC-25-02 | test 401 (anónimo)                     | EVI-25-03     | PASS          |
+| AC-25-03 | test 403 (autenticado sin concesión)   | EVI-25-03     | PASS          |
+| AC-25-04 | el 403 no aparece sin token            | EVI-25-03     | PASS          |
+
+---
+
+## Cierre de la Fase II — Auth con RBAC
+
+Esta fase agrega identidad y autorización sobre el negocio cerrado en el ISS-14. Los tres accesos quedan definidos, y cada endpoint de la API usa uno solo.
+
+| Acceso | Endpoints |
+|--------|-----------|
+| **OPEN** | `POST /api/auth/login/`, `/api/auth/refresh/`, `/api/auth/logout/`, esquema y Swagger |
+| **JWT con token** | `GET/PATCH /api/auth/profile/` |
+| **JWT con token + RBAC** | Catálogo (products, supplies, recipes, recipe-supplies, promotions, products/available), producción (production-batches, supply-movements), ventas (sales, sale-details, payments) y la matriz RBAC (users, roles, role-users, resources, resource-roles) |
+
+### Qué queda construido
+
+- Custom User con hash de Django.
+- Access token no persistido.
+- Refresh con hash, familia, rotación y revocación por reuso.
+- Logout del refresh.
+- Perfil solo con JWT, sin matriz.
+- Matriz `Role → Resource` con `RoleUser` y `ResourceRole`.
+- Permiso `HasResourceAccess` sobre el negocio.
+- 401 sin identidad, 403 con identidad y sin concesión.
+- Semilla tomada de `resolve().route`.
+- Swagger con Bearer.
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py test apps.catalog apps.production apps.sale apps.security
+python manage.py spectacular --file /tmp/hornoraiz-schema.yml --validate
+python manage.py seed_rbac --username admin
+```
+
+| Pieza | Resultado |
+|-------|-----------|
+| Login username y email | PASS |
+| Usuario inactive y clave mala = 401 | PASS |
+| Rotación y reuso de familia | PASS |
+| Logout 204 y refresh posterior 401 | PASS |
+| Perfil JWT con token, y access inválido tras desactivar | PASS |
+| 401 frente a 403 | PASS |
+| Eslabones inactive (Role, RoleUser, ResourceRole, Resource) | PASS |
+| Esquema OpenAPI | PASS (`--validate` exit 0) |
+| Multidialecto | MySQL ejecutado |
+| PostgreSQL, SQL Server, Oracle | NO VERIFICADO EN ESTE ENTORNO |
+
+### GATE AUTH/RBAC
+
+| AC | Verificación | Evidencia | Resultado |
+|----|--------------|-----------|-----------|
+| Hash de contraseña y de refresh | tests de login | suite | PASS |
+| OPEN, JWT con token, JWT con token + RBAC | contrato y tests | suite | PASS |
+| Deny by default | `RbacTests` | suite | PASS |
+| 401 distinto de 403 | tests explícitos | suite | PASS |
+| Swagger Bearer | extensión OpenAPI | `--validate` | PASS |
+| PostgreSQL, SQL Server, Oracle | sin levantar | — | NO VERIFICADO |
+
+El GATE de esta fase se supera en el motor donde la suite corrió (MySQL). No incluye una ejecución en PostgreSQL, SQL Server ni Oracle.
