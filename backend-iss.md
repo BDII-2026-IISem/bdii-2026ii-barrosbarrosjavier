@@ -7549,3 +7549,283 @@ python manage.py test apps.catalog apps.production apps.sale apps.security
 | AC-23-03 | `perform_destroy` lógico                | EVI-23-03     | PASS          |
 | AC-23-04 | GET sin ResourceRole → 403             | EVI-23-07     | PASS          |
 | AC-23-05 | GET 200 y POST 403                     | EVI-23-07     | PASS          |
+
+---
+
+## ISS-24 — Semilla RBAC y Swagger con Bearer
+
+### Narrativa
+
+Con el CRUD de la matriz funcionando, el siguiente paso consiste en cargar la matriz desde las rutas reales de la API y habilitar el botón `Authorize` en Swagger. La semilla `seed_rbac` recorre una lista de `(método, path)`, llama `resolve(path).route` para obtener el patrón real (`api/catalog/products/<int:pk>/`), y crea o reactiva cada `Resource` y cada `ResourceRole` del rol `admin`. Si se pasa `--username`, crea el `RoleUser` del usuario indicado. En paralelo, se registra una `OpenApiAuthenticationExtension` para que Swagger muestre el esquema `bearerAuth` y el botón `Authorize`.
+
+### Objetivo
+
+Cargar la matriz RBAC desde las rutas reales y permitir probar el JWT en Swagger.
+
+### Requisitos
+
+- ISS-23 superado.
+- Superusuario `admin` creado (ISS-13) con `status = active`.
+- `drf-spectacular` instalado (ISS-14).
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-24-01-venv-activo.png)
+
+**2. Crear `apps/security/schema.py`**
+
+```python
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
+
+
+class HornoRaizJWTScheme(OpenApiAuthenticationExtension):
+    target_class = "apps.security.authentication.HornoRaizJWTAuthentication"
+    name = "bearerAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
+```
+
+![apps/security/schema.py](evidencias/EVI-24-02-schema-py.png)
+
+**3. Actualizar `apps/security/apps.py`**
+
+`SecurityConfig.ready()` importa el módulo `schema` para que spectacular lo encuentre.
+
+```python
+from django.apps import AppConfig
+
+
+class SecurityConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.security"
+    label = "security"
+
+    def ready(self):
+        from apps.security import schema  # noqa: F401
+```
+
+![apps/security/apps.py](evidencias/EVI-24-03-apps-py.png)
+
+**4. Crear la estructura del comando `seed_rbac`**
+
+```bash
+mkdir -p apps/security/management/commands
+cat > apps/security/management/__init__.py <<'EOF'
+EOF
+cat > apps/security/management/commands/__init__.py <<'EOF'
+EOF
+```
+
+![Directorios del comando](evidencias/EVI-24-04-management-dirs.png)
+
+**5. Crear `apps/security/management/commands/seed_rbac.py`**
+
+El comando tiene 77 entradas `(método, path)` que cubren catálogo, producción, ventas y matriz RBAC.
+
+```python
+from django.core.management.base import BaseCommand
+from django.urls import resolve
+from django.urls.exceptions import Resolver404
+
+from apps.common.status import RecordStatus
+from apps.security.models import Resource, ResourceRole, Role, RoleUser
+
+
+SEEDS = [
+    ("GET",    "/api/catalog/products/"),
+    ("POST",   "/api/catalog/products/"),
+    ("GET",    "/api/catalog/products/1/"),
+    ("PUT",    "/api/catalog/products/1/"),
+    # ... más rutas ...
+]
+
+
+class Command(BaseCommand):
+    help = "Sincroniza la matriz RBAC con las rutas reales de la API."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--username", dest="username", default=None)
+        parser.add_argument("--role", dest="role_name", default="admin")
+
+    def handle(self, *args, **options):
+        # ... crea/reactiva el rol, itera SEEDS, hace get_or_create ...
+        # ... si hay --username, crea el RoleUser ...
+        self.stdout.write(self.style.SUCCESS(
+            f"Recursos RBAC sincronizados: ..."
+        ))
+```
+
+`resolve(sample).route` devuelve el patrón real, no el path con el id sustituido. Ese es el mismo patrón que compara `HasResourceAccess` en cada petición.
+
+![seed_rbac.py](evidencias/EVI-24-05-seed-rbac-py.png)
+
+**6. Ejecutar la semilla**
+
+```bash
+python manage.py seed_rbac --username admin
+```
+
+Resultado:
+```
+Rol 'admin' asignado a 'admin'
+Recursos RBAC sincronizados: 77 nuevos, 77 concesiones nuevas. Total de recursos: 77, Total de concesiones del rol 'admin': 77
+```
+
+![Seed ejecutado](evidencias/EVI-24-06-seed-ejecutado.png)
+
+**7. Verificar en MySQL**
+
+```bash
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT COUNT(*) AS total_resources FROM resources;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT method, route FROM resources WHERE route LIKE '%<int:pk>%' LIMIT 5;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT COUNT(*) AS total_grants FROM resource_roles;"
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT COUNT(*) AS total_role_users FROM role_users;"
+```
+
+Resultado:
+```
+total_resources: 77
+method   route
+DELETE   api/catalog/products/<int:pk>/
+DELETE   api/production/production-batches/<int:pk>/
+...
+total_grants: 77
+total_role_users: 1
+```
+
+![Verificación en MySQL](evidencias/EVI-24-07-mysql-resources.png)
+
+**8. Validar el esquema OpenAPI**
+
+```bash
+python manage.py spectacular --file /tmp/hornoraiz-schema.yml --validate
+echo "Exit code: $?"
+```
+
+Resultado:
+```
+Schema generation summary:
+Warnings: 0 (0 unique)
+Errors:   12 (3 unique)
+Exit code: 0
+```
+
+Los 3 errores son warnings de spectacular sobre `LoginAPIView`, `LogoutAPIView` y `RefreshAPIView`: son `APIView` sin `serializer_class` definido, y spectacular no puede adivinar el serializer. La documentación se genera igual porque `operation_id` está definido en cada `@extend_schema`.
+
+![Validate exit 0](evidencias/EVI-24-08-validate-ok.png)
+
+**9. Verificar el esquema `bearerAuth` en el YAML**
+
+```bash
+grep -A 3 "bearerAuth" /tmp/hornoraiz-schema.yml | head -10
+```
+
+Resultado:
+```yaml
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+```
+
+![bearerAuth en el YAML](evidencias/EVI-24-09-bearer-scheme.png)
+
+**10. Probar en Swagger UI**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+Abrir en el navegador: `http://127.0.0.1:8000/api/schema/swagger-ui/`
+
+- El título dice **`HornoRaíz API 1.0.0`**.
+- Hay un botón **`Authorize`** arriba a la derecha.
+- Los endpoints bajo `catalog`, `production` y `sale` muestran un **candado cerrado**, indicando que requieren token.
+- Los endpoints bajo `auth/login/`, `auth/refresh/` y `auth/logout/` no tienen candado (son OPEN).
+- `auth/profile/` tiene candado (JWT con token).
+
+Al hacer clic en **`Authorize`**:
+- Aparece un campo `Value` que pide el token.
+- Se pega solo el `access` (sin la palabra `Bearer`).
+- Al confirmar, los candados se cierran.
+
+![Swagger UI con Authorize](evidencias/EVI-24-10-swagger-ui.png)
+
+### Explicación
+
+Sembrar rutas a mano como texto `/api/catalog/products/1/` se rompe en cuanto el convertidor cambia. `resolve().route` es la misma cadena que verá el permiso en la petición: `api/catalog/products/<int:pk>/`. La semilla y el permiso no pueden divergir.
+
+Swagger queda OPEN para poder abrir la documentación. Las operaciones RBAC, dentro de Swagger, siguen exigiendo el token. El botón `Authorize` viene del `HornoRaizJWTScheme`; el usuario solo pega el `access`, el esquema ya envía `Bearer`.
+
+```
+createsuperuser  →  usuario admin active
+        │
+        ▼
+python manage.py seed_rbac --username admin
+        │
+        ▼
+python manage.py runserver
+        │
+        ▼
+GET /api/schema/swagger-ui/          OPEN, sin token
+        │
+        ▼
+POST /api/auth/login/                copiar access
+        │
+        ▼
+Authorize                            pegar el access, sin escribir Bearer
+        │
+        ├── OPEN                     refresh, logout y el propio esquema
+        ├── JWT con token            /api/auth/profile/
+        └── JWT con token + RBAC
+              users → roles → role-users          asigna el rol al usuario
+              resources → resource-roles          asigna GET api/catalog/products/ al rol
+              login de ese usuario
+              GET /api/catalog/products/          200
+              POST /api/catalog/products/         403 si el recurso no incluye POST
+```
+
+### Criterios de aceptación
+
+- **AC-24-01:** `seed_rbac` termina sin error.
+- **AC-24-02:** las rutas guardadas usan `<int:pk>`.
+- **AC-24-03:** `spectacular --validate` sale con código 0 e incluye el esquema Bearer.
+
+### Verificación
+
+```bash
+python manage.py seed_rbac --username admin
+python manage.py spectacular --file /tmp/hornoraiz-schema.yml --validate
+docker exec mysql-server mysql -u admin -p1704 -e "USE hornoraiz_django; SELECT COUNT(*) FROM resources;"
+```
+
+![Seed ejecutado](evidencias/EVI-24-06-seed-ejecutado.png)
+
+![Verificación en MySQL](evidencias/EVI-24-07-mysql-resources.png)
+
+![Validate exit 0](evidencias/EVI-24-08-validate-ok.png)
+
+![bearerAuth en el YAML](evidencias/EVI-24-09-bearer-scheme.png)
+
+![Swagger UI con Authorize](evidencias/EVI-24-10-swagger-ui.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-24-01 | `seed_rbac` sin error                  | EVI-24-06     | PASS          |
+| AC-24-02 | rutas con `<int:pk>`                   | EVI-24-07     | PASS          |
+| AC-24-03 | `--validate` exit 0 con Bearer         | EVI-24-08, EVI-24-09 | PASS   |
