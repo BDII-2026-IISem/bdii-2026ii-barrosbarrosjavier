@@ -183,7 +183,7 @@ class RbacModelsTests(TestCase):
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.common.testing import PASSWORD, create_active_user
+from apps.common.testing import PASSWORD, create_active_user, grant_crud
 
 
 class AuthFlowTests(APITestCase):
@@ -480,3 +480,172 @@ class RbacAccessTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
         response = self._get_products()
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+
+# ----------------- ISS-23: CRUD de la matriz RBAC -----------------
+class SecurityMatrixApiTests(APITestCase):
+    """Cubre el CRUD de la matriz y la cadena usuario -> rol -> recurso."""
+
+    def setUp(self):
+        # El usuario admin de pruebas: tiene CRUD completo en la matriz
+        self.admin = create_active_user(
+            username="matrix-admin",
+            email="matrix-admin@hornoraiz.test",
+        )
+        for path in (
+            "/api/users/",
+            "/api/roles/",
+            "/api/role-users/",
+            "/api/resources/",
+            "/api/resource-roles/",
+        ):
+            grant_crud(self.admin, path, f"{path}1/")
+        # También CRUD en productos, para la cadena
+        grant_crud(
+            self.admin,
+            "/api/catalog/products/",
+            "/api/catalog/products/1/",
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_role_crud(self):
+        # POST
+        created = self.client.post(
+            "/api/roles/",
+            {"name": "bodega", "description": "Bodega"},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(created.data["status"], RecordStatus.INACTIVE)
+        pk = created.data["id"]
+
+        # GET lista
+        listed = self.client.get("/api/roles/")
+        self.assertEqual(listed.status_code, status.HTTP_200_OK)
+
+        # GET detalle
+        detail = self.client.get(f"/api/roles/{pk}/")
+        self.assertEqual(detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(detail.data["name"], "bodega")
+
+        # PATCH
+        patched = self.client.patch(
+            f"/api/roles/{pk}/",
+            {"status": RecordStatus.ACTIVE},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK)
+        self.assertEqual(patched.data["status"], RecordStatus.ACTIVE)
+
+        # DELETE lógico
+        deleted = self.client.delete(f"/api/roles/{pk}/")
+        self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+        stored = Role.objects.get(pk=pk)
+        self.assertEqual(stored.status, RecordStatus.INACTIVE)
+
+    def test_user_role_resource_chain(self):
+        # Helper: autenticar como admin (limpia todo)
+        def as_admin():
+            self.client.credentials()
+            self.client.force_authenticate(user=self.admin)
+
+        # Helper: autenticar con Bearer del user nuevo (limpia todo)
+        def as_new_user(token):
+            self.client.force_authenticate(user=None)
+            self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        # 1. Crear rol activo
+        as_admin()
+        role = self.client.post(
+            "/api/roles/",
+            {"name": "catalogo", "status": RecordStatus.ACTIVE},
+            format="json",
+        )
+        self.assertEqual(role.status_code, status.HTTP_201_CREATED)
+        role_id = role.data["id"]
+
+        # 2. Crear usuario activo
+        user = self.client.post(
+            "/api/users/",
+            {
+                "username": "catalogo1",
+                "email": "catalogo1@hornoraiz.test",
+                "password": "HornoRaiz-2026-X",
+                "status": RecordStatus.ACTIVE,
+            },
+            format="json",
+        )
+        self.assertEqual(user.status_code, status.HTTP_201_CREATED)
+        self.assertNotIn("password", user.data)
+        user_id = user.data["id"]
+
+        # 3. Login como el usuario nuevo
+        self.client.force_authenticate(user=None)
+        self.client.credentials()
+        login_new = self.client.post(
+            "/api/auth/login/",
+            {"username": "catalogo1", "password": "HornoRaiz-2026-X"},
+            format="json",
+        )
+        self.assertEqual(login_new.status_code, status.HTTP_200_OK)
+        access_new = login_new.data["access"]
+
+        # 3b. Sin rol -> 403
+        as_new_user(access_new)
+        denied_no_role = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied_no_role.status_code, status.HTTP_403_FORBIDDEN)
+
+        # 4. Asignar RoleUser
+        as_admin()
+        assignment = self.client.post(
+            "/api/role-users/",
+            {"role": role_id, "user": user_id, "status": RecordStatus.ACTIVE},
+            format="json",
+        )
+        self.assertEqual(assignment.status_code, status.HTTP_201_CREATED)
+
+        # 4b. Sin ResourceRole -> 403 todavía
+        as_new_user(access_new)
+        denied_no_resource = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied_no_resource.status_code, status.HTTP_403_FORBIDDEN)
+
+        # 5. Reutilizar el Resource ya existente para GET /api/catalog/products/
+        #    (creado por grant_crud en setUp). El UniqueConstraint (method, route)
+        #    impide crear otro idéntico.
+        from apps.security.models import Resource
+        resource_obj = Resource.objects.get(
+            method="GET", route="api/catalog/products/"
+        )
+        resource_id = resource_obj.id
+
+        # 5b. Sin ResourceRole todavía -> 403
+        as_new_user(access_new)
+        denied_no_grant = self.client.get("/api/catalog/products/")
+        self.assertEqual(denied_no_grant.status_code, status.HTTP_403_FORBIDDEN)
+
+        # 6. Crear ResourceRole
+        as_admin()
+        grant_ok = self.client.post(
+            "/api/resource-roles/",
+            {
+                "resource": resource_id,
+                "role": role_id,
+                "status": RecordStatus.ACTIVE,
+            },
+            format="json",
+        )
+        self.assertEqual(grant_ok.status_code, status.HTTP_201_CREATED)
+
+        # 6b. Con ResourceRole activo -> 200
+        as_new_user(access_new)
+        allowed = self.client.get("/api/catalog/products/")
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+
+        # 7. POST sigue en 403
+        denied_post = self.client.post(
+            "/api/catalog/products/",
+            {"sku": "X-ISS23", "name": "Test", "price": "1.00"},
+            format="json",
+        )
+        self.assertEqual(denied_post.status_code, status.HTTP_403_FORBIDDEN)

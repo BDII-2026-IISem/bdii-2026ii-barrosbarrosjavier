@@ -7254,3 +7254,298 @@ curl http://127.0.0.1:8000/api/catalog/products/
 | AC-22-01 | negocio con RBAC → 48 tests OK         | EVI-22-08     | PASS          |
 | AC-22-02 | deny by default → 403 sin concesión    | EVI-22-09     | PASS          |
 | AC-22-03 | perfil sigue en JWT con token          | EVI-22-09     | PASS          |
+
+---
+
+## ISS-23 — CRUD de la matriz RBAC
+
+### Narrativa
+
+Con `HasResourceAccess` (ISS-21) y el negocio cerrado (ISS-22), el siguiente paso consiste en administrar la matriz RBAC por HTTP. Se exponen cinco recursos nuevos —`users`, `roles`, `role-users`, `resources`, `resource-roles`— con `ModelViewSet` y baja lógica. `RoleUser` asigna un rol a un usuario; `ResourceRole` asigna un recurso a un rol. Con los dos enlaces activos, ese usuario puede ejecutar la ruta concedida. Estos endpoints son JWT con token + RBAC: crear un rol no es OPEN ni basta con traer el JWT, hace falta la concesión.
+
+### Objetivo
+
+Administrar la matriz RBAC por HTTP y usarla para autorizar: el CRUD crea cada fila, `RoleUser` asigna el rol al usuario y `ResourceRole` asigna el recurso al rol.
+
+### Requisitos
+
+- ISS-22 superado: negocio cerrado con RBAC.
+- Modelos `Role`, `RoleUser`, `Resource`, `ResourceRole` (ISS-16).
+- `apps/security/rbac_views.py` con `ProfileAPIView` (ISS-20).
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-23-01-venv-activo.png)
+
+**2. Agregar los 5 serializers a `apps/security/serializers.py`**
+
+Se agregaron `UserSerializer` (con `password` write-only y `set_password`), `RoleSerializer`, `RoleUserSerializer`, `ResourceSerializer` y `ResourceRoleSerializer`.
+
+```python
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(
+        write_only=True, required=False, allow_blank=False,
+        style={"input_type": "password"},
+    )
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "email", "first_name", "last_name", "status", "password"]
+        read_only_fields = ["id"]
+
+    def validate_password(self, value):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        if value is None or value == "":
+            return value
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+        return value
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        user = User(**validated_data)
+        if password:
+            user.set_password(password)
+        else:
+            user.set_unusable_password()
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+
+class RoleSerializer(serializers.ModelSerializer): ...
+
+
+class RoleUserSerializer(serializers.ModelSerializer): ...
+
+
+class ResourceSerializer(serializers.ModelSerializer): ...
+
+
+class ResourceRoleSerializer(serializers.ModelSerializer): ...
+```
+
+`password` es `write_only` y pasa por `set_password` en `create` y `update`. `validate_password` usa los validadores de Django y traduce `ValidationError` al de DRF.
+
+![apps/security/serializers.py](evidencias/EVI-23-02-serializers-py.png)
+
+**3. Agregar los 5 ViewSets a `apps/security/rbac_views.py`**
+
+`SoftDeleteModelViewSet` es un `ModelViewSet` con baja lógica y filtro `?status=`. De él heredan los 5 ViewSets. `ProfileAPIView` (ISS-20) se mantiene.
+
+```python
+class SoftDeleteModelViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, HasResourceAccess]
+    lookup_value_converter = "int"
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        status_value = self.request.query_params.get("status")
+        if status_value:
+            normalized = status_value.strip().lower()
+            if normalized in {"active", "true", "1"}:
+                queryset = queryset.filter(status=RecordStatus.ACTIVE)
+            elif normalized in {"inactive", "false", "0"}:
+                queryset = queryset.filter(status=RecordStatus.INACTIVE)
+        return queryset
+
+    def perform_destroy(self, instance):
+        instance.status = RecordStatus.INACTIVE
+        instance.save(update_fields=["status", "updated_at"])
+
+
+class UserViewSet(SoftDeleteModelViewSet): ...
+class RoleViewSet(SoftDeleteModelViewSet): ...
+class RoleUserViewSet(SoftDeleteModelViewSet): ...
+class ResourceViewSet(SoftDeleteModelViewSet): ...
+class ResourceRoleViewSet(SoftDeleteModelViewSet): ...
+```
+
+![apps/security/rbac_views.py](evidencias/EVI-23-03-rbac-views-py.png)
+
+**4. Actualizar `apps/security/urls.py`**
+
+Se agregó el `SimpleRouter` con los 5 recursos. `urlpatterns += router.urls` concatena las rutas del CRUD después de las de auth.
+
+```python
+from rest_framework.routers import SimpleRouter
+
+urlpatterns = [
+    path("auth/login/", LoginAPIView.as_view(), name="auth-login"),
+    path("auth/refresh/", RefreshAPIView.as_view(), name="auth-refresh"),
+    path("auth/logout/", LogoutAPIView.as_view(), name="auth-logout"),
+    path("auth/profile/", ProfileAPIView.as_view(), name="auth-profile"),
+]
+
+router = SimpleRouter(use_regex_path=False)
+router.register("users", UserViewSet, basename="user")
+router.register("roles", RoleViewSet, basename="role")
+router.register("role-users", RoleUserViewSet, basename="role-user")
+router.register("resources", ResourceViewSet, basename="resource")
+router.register("resource-roles", ResourceRoleViewSet, basename="resource-role")
+
+urlpatterns += router.urls
+```
+
+Las rutas quedan:
+```
+/api/users/                  /api/users/<int:pk>/
+/api/roles/                  /api/roles/<int:pk>/
+/api/role-users/             /api/role-users/<int:pk>/
+/api/resources/              /api/resources/<int:pk>/
+/api/resource-roles/         /api/resource-roles/<int:pk>/
+```
+
+`auth/profile/` queda fuera del router a propósito: no tiene `pk` en la URL.
+
+![apps/security/urls.py](evidencias/EVI-23-04-urls-py.png)
+
+**5. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+![Check exitoso](evidencias/EVI-23-05-check-ok.png)
+
+**6. Agregar los tests**
+
+`apps/security/tests.py` con la clase `SecurityMatrixApiTests`. El `setUp` concede el CRUD de los 5 recursos al admin y también del catálogo (para la cadena). El test `test_user_role_resource_chain` crea un usuario nuevo, le asigna un rol, concede un `Resource` y verifica la cadena paso a paso.
+
+```python
+class SecurityMatrixApiTests(APITestCase):
+    def setUp(self):
+        self.admin = create_active_user(
+            username="matrix-admin",
+            email="matrix-admin@hornoraiz.test",
+        )
+        for path in (
+            "/api/users/", "/api/roles/", "/api/role-users/",
+            "/api/resources/", "/api/resource-roles/",
+        ):
+            grant_crud(self.admin, path, f"{path}1/")
+        grant_crud(self.admin, "/api/catalog/products/", "/api/catalog/products/1/")
+        self.client.force_authenticate(user=self.admin)
+
+    def test_role_crud(self):
+        """POST, GET lista, GET detalle, PATCH y DELETE lógico de un rol."""
+        ...
+
+    def test_user_role_resource_chain(self):
+        """Cadena paso a paso: sin rol 403, con RoleUser 403, con Resource
+        suelto 403, con ResourceRole 200, POST sigue en 403."""
+        ...
+```
+
+El test usa un helper `as_admin()` / `as_new_user(token)` que llama `force_authenticate(user=None)` antes de cambiar el header, porque `force_authenticate` tiene prioridad sobre `Authorization`.
+
+![apps/security/tests.py](evidencias/EVI-23-06-tests-py.png)
+
+**7. Ejecutar el test específico**
+
+```bash
+python manage.py test apps.security.tests.SecurityMatrixApiTests -v 2
+```
+
+Resultado:
+```
+Found 2 test(s).
+...
+test_role_crud ... ok
+test_user_role_resource_chain ... ok
+----------------------------------------------------------------------
+Ran 2 tests in 5.731s
+
+OK
+```
+
+![Tests de la matriz PASS](evidencias/EVI-23-07-matrix-tests.png)
+
+**8. Ejecutar toda la suite**
+
+```bash
+python manage.py test apps.catalog apps.production apps.sale apps.security
+```
+
+Resultado:
+```
+Found 50 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+..................................................
+----------------------------------------------------------------------
+Ran 50 tests in 43.107s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los 50 son: 5 de catálogo, 4 de producción, 9 de ventas, 30 de seguridad (motor, refresh token, RBAC models, login, refresh, logout, perfil y `HasResourceAccess`) y 2 de la matriz CRUD.
+
+![Suite completa PASS](evidencias/EVI-23-08-full-suite.png)
+
+### Explicación
+
+El CRUD de cada tabla es homogéneo: listar, crear, leer, actualizar y dar de baja. Por eso es `ModelViewSet`. La contraseña cabe en el serializer: es `write_only` y pasa por `set_password`.
+
+Las tablas `role_users` y `resource_roles` no son un CRUD más. `RoleUser` dice qué rol tiene el usuario. `ResourceRole` dice qué método y qué ruta puede ese rol. `HasResourceAccess` exige los dos enlaces, y el rol, el recurso y la concesión en `active`. Un usuario creado por aquí nace `inactive` si el cuerpo no envía `status`. Hasta que alguien lo active, login responde `401`.
+
+```
+User ── RoleUser ── Role ── ResourceRole ── Resource
+catalogo1            catalogo                 GET api/catalog/products/
+        │
+        ▼
+HasResourceAccess
+        │
+        └── los cuatro eslabones active → la ruta responde
+```
+
+`SoftDeleteModelViewSet.perform_destroy` cambia `status` a `inactive` en lugar de borrar la fila. El `DELETE` de estas entidades no borra el histórico.
+
+### Criterios de aceptación
+
+- **AC-23-01:** el serializer no devuelve `password`.
+- **AC-23-02:** la contraseña pasa por `set_password`, no se asigna en claro.
+- **AC-23-03:** `DELETE` de estas entidades no borra la fila.
+- **AC-23-04:** asignar el rol con `RoleUser`, sin `ResourceRole`, deja `GET /api/catalog/products/` en 403.
+- **AC-23-05:** con `ResourceRole` activo de `GET api/catalog/products/`, ese GET responde 200 y el POST sigue en 403.
+
+### Verificación
+
+```bash
+python manage.py test apps.security.tests.SecurityMatrixApiTests
+python manage.py test apps.catalog apps.production apps.sale apps.security
+```
+
+![Tests de la matriz PASS](evidencias/EVI-23-07-matrix-tests.png)
+
+![Suite completa PASS](evidencias/EVI-23-08-full-suite.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-23-01 | `write_only`                           | EVI-23-02     | PASS          |
+| AC-23-02 | `set_password` en create y update      | EVI-23-02     | PASS          |
+| AC-23-03 | `perform_destroy` lógico                | EVI-23-03     | PASS          |
+| AC-23-04 | GET sin ResourceRole → 403             | EVI-23-07     | PASS          |
+| AC-23-05 | GET 200 y POST 403                     | EVI-23-07     | PASS          |
