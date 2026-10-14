@@ -1,6 +1,8 @@
 from rest_framework import viewsets
 from rest_framework.generics import ListAPIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+
+from apps.security.permissions import HasResourceAccess
 
 from apps.catalog.models import (
     Product,
@@ -21,7 +23,7 @@ from apps.catalog.serializers import (
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
     lookup_value_converter = "int"
 
     def get_queryset(self):

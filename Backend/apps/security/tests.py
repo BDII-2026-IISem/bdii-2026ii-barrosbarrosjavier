@@ -381,3 +381,102 @@ class ProfileTests(APITestCase):
         self.user.save()
         denied = self.client.get("/api/auth/profile/")
         self.assertEqual(denied.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+
+# ----------------- ISS-21: HasResourceAccess -----------------
+from apps.security.models import (
+    HttpMethod,
+    Resource,
+    ResourceRole,
+    Role,
+    RoleUser,
+)
+from apps.security.permissions import HasResourceAccess
+
+
+class RbacAccessTests(APITestCase):
+    """Cubre HasResourceAccess sobre el recurso /api/catalog/products/."""
+
+    def setUp(self):
+        self.user = create_active_user(
+            username="rbac-access-user",
+            email="rbac-access@hornoraiz.test",
+        )
+        self.login = self.client.post(
+            "/api/auth/login/",
+            {"username": "rbac-access-user", "password": PASSWORD},
+            format="json",
+        )
+        self.access = self.login.data["access"]
+
+        # Recurso real: GET /api/catalog/products/
+        self.resource = Resource.objects.create(
+            name="Listar productos",
+            method=HttpMethod.GET,
+            route="api/catalog/products/",
+            status=RecordStatus.ACTIVE,
+        )
+        self.role = Role.objects.create(
+            name="catalogo-lector",
+            status=RecordStatus.ACTIVE,
+        )
+        self.grant = ResourceRole.objects.create(
+            resource=self.resource,
+            role=self.role,
+            status=RecordStatus.ACTIVE,
+        )
+        self.assignment = RoleUser.objects.create(
+            role=self.role,
+            user=self.user,
+            status=RecordStatus.ACTIVE,
+        )
+
+    def _get_products(self):
+        return self.client.get("/api/catalog/products/")
+
+    def test_authenticated_without_grant_is_403(self):
+        # Sin concesión: 403
+        self.grant.status = RecordStatus.INACTIVE
+        self.grant.save()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+        response = self._get_products()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_anonymous_is_401(self):
+        # Sin header -> 401
+        response = self._get_products()
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_grant_active_returns_200(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+        response = self._get_products()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_inactive_role_is_403(self):
+        self.role.status = RecordStatus.INACTIVE
+        self.role.save()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+        response = self._get_products()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_inactive_role_user_is_403(self):
+        self.assignment.status = RecordStatus.INACTIVE
+        self.assignment.save()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+        response = self._get_products()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_inactive_grant_is_403(self):
+        self.grant.status = RecordStatus.INACTIVE
+        self.grant.save()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+        response = self._get_products()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_inactive_resource_is_403(self):
+        self.resource.status = RecordStatus.INACTIVE
+        self.resource.save()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+        response = self._get_products()
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

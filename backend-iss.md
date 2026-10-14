@@ -6580,3 +6580,325 @@ curl http://127.0.0.1:8000/api/auth/profile/
 | AC-20-02 | perfil 200 sin password                | EVI-20-08     | PASS          |
 | AC-20-03 | PATCH firstName                        | EVI-20-09     | PASS          |
 | AC-20-04 | usuario desactivado 401                | EVI-20-08     | PASS          |
+
+---
+
+## ISS-21 — HasResourceAccess
+
+### Narrativa
+
+Con el perfil JWT con token funcionando, el siguiente paso consiste en la mitad de autorización del tercer acceso de la API: JWT con token + RBAC. La clase `HasResourceAccess` decide, por método HTTP y patrón de ruta, si el usuario tiene un rol activo que le concede acceso al recurso. No autentica: la autenticación la hace `HornoRaizJWTAuthentication` (ISS-20). Si el usuario no está autenticado, la respuesta es `401`; si está autenticado pero sin concesión activa, `403`. La política es de **negación por defecto**: si algún eslabón de la cadena `usuario → rol → recurso` está inactivo, no hay acceso.
+
+### Objetivo
+
+Autorizar por método y patrón de ruta, con negación por defecto, exigiendo que todos los eslabones de la cadena `usuario → rol → recurso` estén activos.
+
+### Requisitos
+
+- ISS-20 superado: perfil JWT con token funcionando.
+- Modelos `Role`, `RoleUser`, `Resource`, `ResourceRole` (ISS-16).
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-21-01-venv-activo.png)
+
+**2. Crear `apps/security/permissions.py`**
+
+```python
+from rest_framework.permissions import BasePermission
+
+from apps.common.status import RecordStatus
+from apps.security.models import ResourceRole
+
+
+class HasResourceAccess(BasePermission):
+    """Autoriza por método y patrón de ruta, con negación por defecto.
+
+    Compara request.method con request.resolver_match.route y exige que
+    todos los eslabones de la cadena usuario -> rol -> recurso estén
+    activos. HEAD se evalúa como GET. OPTIONS, si ya hay usuario, no busca
+    recurso (es el preflight, no una operación de negocio).
+    """
+
+    message = "No tiene autorización para ejecutar esta operación."
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if getattr(user, "status", None) != RecordStatus.ACTIVE:
+            return False
+        if request.method.upper() == "OPTIONS":
+            return True
+
+        match = request.resolver_match
+        if match is None:
+            return False
+        method = request.method.upper()
+        if method == "HEAD":
+            method = "GET"
+        return ResourceRole.objects.filter(
+            status=RecordStatus.ACTIVE,
+            resource__status=RecordStatus.ACTIVE,
+            resource__method=method,
+            resource__route=match.route,
+            role__status=RecordStatus.ACTIVE,
+            role__assignments__user=user,
+            role__assignments__status=RecordStatus.ACTIVE,
+        ).exists()
+```
+
+No se compara la URL `/api/catalog/products/15/` con un texto guardado: se compara `request.resolver_match.route`, que en este proyecto es `api/catalog/products/<int:pk>/`.
+
+![apps/security/permissions.py](evidencias/EVI-21-02-permissions-py.png)
+
+**3. Aplicar `HasResourceAccess` a `ProductViewSet`**
+
+En `apps/catalog/views.py`, se cambió el permiso de `ProductViewSet` de `AllowAny` a `[IsAuthenticated, HasResourceAccess]`. Los demás ViewSets del catálogo siguen con `AllowAny` a propósito para no romper la suite original.
+
+```python
+from rest_framework.permissions import AllowAny, IsAuthenticated
+
+from apps.security.permissions import HasResourceAccess
+
+
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated, HasResourceAccess]
+    lookup_value_converter = "int"
+    # ... resto sin cambios
+```
+
+![apps/catalog/views.py](evidencias/EVI-21-04-views-py.png)
+
+**4. Verificar la configuración**
+
+```bash
+python manage.py check
+```
+
+Resultado:
+```
+System check identified no issues (0 silenced).
+```
+
+![Check exitoso](evidencias/EVI-21-05-check-ok.png)
+
+**5. Agregar los tests**
+
+`apps/security/tests.py` con 7 tests que cubren cada eslabón de la cadena.
+
+```python
+class RbacAccessTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user(
+            username="rbac-access-user",
+            email="rbac-access@hornoraiz.test",
+        )
+        self.login = self.client.post(
+            "/api/auth/login/",
+            {"username": "rbac-access-user", "password": PASSWORD},
+            format="json",
+        )
+        self.access = self.login.data["access"]
+
+        self.resource = Resource.objects.create(
+            name="Listar productos",
+            method=HttpMethod.GET,
+            route="api/catalog/products/",
+            status=RecordStatus.ACTIVE,
+        )
+        self.role = Role.objects.create(
+            name="catalogo-lector",
+            status=RecordStatus.ACTIVE,
+        )
+        self.grant = ResourceRole.objects.create(
+            resource=self.resource,
+            role=self.role,
+            status=RecordStatus.ACTIVE,
+        )
+        self.assignment = RoleUser.objects.create(
+            role=self.role,
+            user=self.user,
+            status=RecordStatus.ACTIVE,
+        )
+
+    def test_authenticated_without_grant_is_403(self): ...
+    def test_anonymous_is_401(self): ...
+    def test_grant_active_returns_200(self): ...
+    def test_inactive_role_is_403(self): ...
+    def test_inactive_role_user_is_403(self): ...
+    def test_inactive_grant_is_403(self): ...
+    def test_inactive_resource_is_403(self): ...
+```
+
+**6. Ejecutar los tests del RBAC**
+
+```bash
+python manage.py test apps.security.tests.RbacAccessTests -v 2
+```
+
+Resultado:
+```
+Found 7 test(s).
+...
+test_anonymous_is_401 ... ok
+test_authenticated_without_grant_is_403 ... ok
+test_grant_active_returns_200 ... ok
+test_inactive_grant_is_403 ... ok
+test_inactive_resource_is_403 ... ok
+test_inactive_role_is_403 ... ok
+test_inactive_role_user_is_403 ... ok
+----------------------------------------------------------------------
+Ran 7 tests in 8.369s
+
+OK
+```
+
+![Tests RBAC PASS](evidencias/EVI-21-06-rbac-tests.png)
+
+**7. Ejecutar toda la suite `apps.security`**
+
+```bash
+python manage.py test apps.security
+```
+
+Resultado:
+```
+Found 30 test(s).
+...
+Ran 30 tests in 29.448s
+
+OK
+```
+
+Los 30 son: 6 de motor (ISS-03), 3 de `RefreshToken` (ISS-15), 5 de RBAC (ISS-16), 3 de login (ISS-17), 3 de refresh (ISS-18), 2 de logout (ISS-19), 1 de perfil (ISS-20) y 7 de `HasResourceAccess` (ISS-21).
+
+![Tests security PASS](evidencias/EVI-21-07-security-tests.png)
+
+**8. Ejecutar toda la suite del proyecto**
+
+```bash
+python manage.py test apps.catalog apps.production apps.sale apps.security
+```
+
+Resultado:
+```
+Found 48 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+................................................
+----------------------------------------------------------------------
+Ran 48 tests in 30.473s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los tests de `apps.catalog` se adaptaron para autenticarse (con un helper `grant()` que crea `Resource` + `Role` + `ResourceRole` + `RoleUser` activos). Ver detalle en `apps/catalog/tests.py`.
+
+![Suite completa PASS](evidencias/EVI-21-08-full-suite.png)
+
+**9. Probar con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+# Sin token -> 401
+curl -s -o /dev/null -w "Sin token: HTTP %{http_code}\n" http://127.0.0.1:8000/api/catalog/products/
+
+# Login
+LOGIN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "HornoRaiz2026!"}')
+ACCESS=$(echo "$LOGIN" | python3 -c "import sys, json; print(json.load(sys.stdin)['access'])")
+
+# Con token pero sin concesión -> 403
+curl -s -o /dev/null -w "Con token sin concesión: HTTP %{http_code}\n" \
+  -H "Authorization: Bearer $ACCESS" \
+  http://127.0.0.1:8000/api/catalog/products/
+```
+
+Resultado:
+```
+Sin token: HTTP 401
+Con token sin concesión: HTTP 403
+```
+
+La diferencia entre `401` y `403` es la clave del diseño:
+- **401** = no hay identidad (falta el Bearer o el JWT es inválido).
+- **403** = sí hay identidad pero el usuario no tiene concesión activa.
+
+![Prueba con curl](evidencias/EVI-21-09-curl.png)
+
+### Explicación
+
+DRF convierte el fallo de la siguiente forma:
+
+```
+hay authenticators y ninguno autenticó  →  401 NotAuthenticated
+usuario autenticado y el permiso falla  →  403 PermissionDenied
+```
+
+Por eso la misma clase produce `401` o `403` según haya identidad. No se compara la URL `/api/catalog/products/15/` con un texto guardado: se compara `resolver_match.route`, que en este proyecto es `api/catalog/products/<int:pk>/`. Eso hace que una misma fila de `Resource` autorice cualquier id.
+
+Si el filtro no encuentra una cadena completa y activa, `exists()` es falso. No hay un permiso implícito.
+
+```
+Request
+   ↓
+JWT (HornoRaizJWTAuthentication)
+   ↓
+User active?
+   ↓
+method + route (HasResourceAccess)
+   ↓
+¿todos los eslabones active?
+   ├── no → 403
+   └── sí → endpoint
+```
+
+`HEAD` se evalúa como `GET`. `OPTIONS`, con usuario ya autenticado, no busca recurso: es el preflight, no una operación de negocio.
+
+### Criterios de aceptación
+
+- **AC-21-01:** usuario autenticado sin concesión recibe 403 en GET `/api/catalog/products/`.
+- **AC-21-02:** el mismo request sin usuario recibe 401.
+- **AC-21-03:** con la concesión activa, la lista responde 200.
+- **AC-21-04:** apagar el rol, el RoleUser, el ResourceRole o el Resource vuelve a 403.
+
+### Verificación
+
+```bash
+python manage.py test apps.security.tests.RbacAccessTests
+python manage.py test apps.catalog apps.production apps.sale apps.security
+curl -H "Authorization: Bearer ..." http://127.0.0.1:8000/api/catalog/products/
+```
+
+![Tests RBAC PASS](evidencias/EVI-21-06-rbac-tests.png)
+
+![Suite completa PASS](evidencias/EVI-21-08-full-suite.png)
+
+![Prueba con curl](evidencias/EVI-21-09-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-21-01 | autenticado sin concesión → 403        | EVI-21-06     | PASS          |
+| AC-21-02 | anónimo → 401                          | EVI-21-06     | PASS          |
+| AC-21-03 | concesión activa → 200                 | EVI-21-06     | PASS          |
+| AC-21-04 | cada eslabón inactivo → 403            | EVI-21-06     | PASS          |
