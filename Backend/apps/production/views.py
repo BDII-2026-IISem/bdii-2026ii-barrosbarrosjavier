@@ -1,17 +1,18 @@
 from rest_framework import viewsets
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 
 from apps.production.models import ProductionBatch, SupplyMovement
 from apps.production.serializers import (
     ProductionBatchSerializer,
     SupplyMovementSerializer,
 )
+from apps.security.permissions import HasResourceAccess
 
 
 class ProductionBatchViewSet(viewsets.ModelViewSet):
     queryset = ProductionBatch.objects.select_related("recipe").all()
     serializer_class = ProductionBatchSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
     lookup_value_converter = "int"
 
     def get_queryset(self):
@@ -35,5 +36,5 @@ class SupplyMovementViewSet(viewsets.ModelViewSet):
         "production_batch", "supply"
     ).all()
     serializer_class = SupplyMovementSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
     lookup_value_converter = "int"

@@ -6,11 +6,30 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.catalog.models import Product, Supply, Recipe
+from apps.common.testing import create_active_user, grant_crud
 from apps.production.models import ProductionBatch, SupplyMovement
 
 
 class ProductionApiTests(APITestCase):
     def setUp(self):
+        # Usuario con concesión completa en producción
+        self.user = create_active_user(
+            username="prod-user",
+            email="prod@hornoraiz.test",
+        )
+        grant_crud(
+            self.user,
+            "/api/production/production-batches/",
+            "/api/production/production-batches/1/",
+        )
+        grant_crud(
+            self.user,
+            "/api/production/supply-movements/",
+            "/api/production/supply-movements/1/",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        # Datos base
         product = Product.objects.create(
             sku="PROD-ISS09-001", name="Pan ISS09", price=Decimal("1000.00")
         )
@@ -29,7 +48,6 @@ class ProductionApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["status"], True)
 
-        # Verificar camelCase en el JSON renderizado
         wire = json.loads(response.content)
         self.assertEqual(wire["recipeName"], "Receta ISS09")
         self.assertIn("createdAt", wire)

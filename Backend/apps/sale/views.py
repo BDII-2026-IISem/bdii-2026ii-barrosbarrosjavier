@@ -5,17 +5,18 @@ from rest_framework.mixins import (
     ListModelMixin,
     RetrieveModelMixin,
 )
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from apps.sale.models import Sale
 from apps.sale.serializers import SaleRegisterSerializer, SaleSerializer
+from apps.security.permissions import HasResourceAccess
 
 
 class SaleRegisterAPIView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
 
     def post(self, request):
         serializer = SaleRegisterSerializer(data=request.data)
@@ -31,14 +32,9 @@ class SaleReadViewSet(
     DestroyModelMixin,
     GenericViewSet,
 ):
-    """Lectura y anulación lógica de ventas.
+    """Lectura y anulación lógica de ventas."""
 
-    GET /api/sale/sales/         → lista (ListModelMixin.list)
-    GET /api/sale/sales/<pk>/    → detalle (RetrieveModelMixin.retrieve)
-    DELETE /api/sale/sales/<pk>/ → anula (DestroyModelMixin.destroy → Sale.void)
-    """
-
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
     serializer_class = SaleSerializer
     lookup_value_converter = "int"
 
@@ -53,7 +49,7 @@ class SaleReadViewSet(
 
 
 class SaleCollectionAPIView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
 
     @extend_schema(
         request=SaleRegisterSerializer,

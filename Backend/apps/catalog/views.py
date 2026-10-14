@@ -1,8 +1,6 @@
 from rest_framework import viewsets
 from rest_framework.generics import ListAPIView
-from rest_framework.permissions import AllowAny, IsAuthenticated
-
-from apps.security.permissions import HasResourceAccess
+from rest_framework.permissions import IsAuthenticated
 
 from apps.catalog.models import (
     Product,
@@ -18,6 +16,7 @@ from apps.catalog.serializers import (
     RecipeSupplySerializer,
     PromotionSerializer,
 )
+from apps.security.permissions import HasResourceAccess
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -42,35 +41,34 @@ class ProductViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["status"])
 
 
-# Serializers y ViewSets para los demás recursos (los publicamos en el ISS-09)
 class SupplyViewSet(viewsets.ModelViewSet):
     queryset = Supply.objects.all()
     serializer_class = SupplySerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
 
 
 class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.select_related("product").all()
     serializer_class = RecipeSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
 
 
 class RecipeSupplyViewSet(viewsets.ModelViewSet):
     queryset = RecipeSupply.objects.select_related("main", "related").all()
     serializer_class = RecipeSupplySerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
 
 
 class PromotionViewSet(viewsets.ModelViewSet):
     queryset = Promotion.objects.all()
     serializer_class = PromotionSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
 
 
 class AvailableProductListAPIView(ListAPIView):
     """Lista solo los productos activos (status=True)."""
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated, HasResourceAccess]
     serializer_class = ProductSerializer
 
     def get_queryset(self):

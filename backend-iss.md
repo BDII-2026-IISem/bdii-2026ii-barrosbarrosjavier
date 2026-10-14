@@ -6902,3 +6902,355 @@ curl -H "Authorization: Bearer ..." http://127.0.0.1:8000/api/catalog/products/
 | AC-21-02 | anónimo → 401                          | EVI-21-06     | PASS          |
 | AC-21-03 | concesión activa → 200                 | EVI-21-06     | PASS          |
 | AC-21-04 | cada eslabón inactivo → 403            | EVI-21-06     | PASS          |
+
+---
+
+## ISS-22 — RBAC sobre el negocio
+
+### Narrativa
+
+Con `HasResourceAccess` implementado en el ISS-21, el siguiente paso consiste en pasar todo el negocio de la Fase I al tercer acceso de la API: JWT con token + RBAC. Hasta aquí, los endpoints de catálogo, producción y ventas no pedían JWT: eran `AllowAny`. Ahora exigen identidad (`IsAuthenticated`) y una concesión activa para el método y la ruta (`HasResourceAccess`). El permiso global del proyecto también pasa a `IsAuthenticated`. Los tres accesos de la API quedan diferenciados: OPEN para login/refresh/logout/schema, JWT con token para el perfil, y JWT con token + RBAC para el negocio.
+
+### Objetivo
+
+Pasar el negocio de la Fase I al tercer acceso de la API (JWT con token + RBAC), cambiando `AllowAny` por `[IsAuthenticated, HasResourceAccess]` en todas las vistas de catálogo, producción y ventas, y adaptando los tests para autenticarse y conceder los permisos.
+
+### Requisitos
+
+- ISS-21 superado: `HasResourceAccess` funcionando.
+- `apps/common/testing.py` con `PASSWORD` y `create_active_user` (desde el ISS-17).
+- Modelos `Role`, `RoleUser`, `Resource`, `ResourceRole` (desde el ISS-16).
+
+### Construcción
+
+**1. Confirmar el entorno**
+
+```bash
+cd /root/bdii/Backend
+source .venv/bin/activate
+which python
+```
+
+![Entorno virtual activo](evidencias/EVI-22-01-venv-activo.png)
+
+**2. Aplicar `[IsAuthenticated, HasResourceAccess]` a todas las vistas de negocio**
+
+Se reemplazó `AllowAny` en `apps/catalog/views.py`, `apps/production/views.py` y `apps/sale/views.py`. Ahora todos los ViewSets y las APIView usan `[IsAuthenticated, HasResourceAccess]`.
+
+```python
+# apps/catalog/views.py
+from rest_framework.permissions import IsAuthenticated
+from apps.security.permissions import HasResourceAccess
+
+
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated, HasResourceAccess]
+    ...
+
+
+# apps/production/views.py
+class ProductionBatchViewSet(viewsets.ModelViewSet):
+    ...
+    permission_classes = [IsAuthenticated, HasResourceAccess]
+
+
+# apps/sale/views.py
+class SaleRegisterAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasResourceAccess]
+    ...
+
+
+class SaleCollectionAPIView(APIView):
+    permission_classes = [IsAuthenticated, HasResourceAccess]
+    ...
+```
+
+`AvailableProductListAPIView` también pasa a RBAC. Los 5 recursos de `catalog`, los 2 de `production` y los 3 de `sale` quedan cerrados.
+
+![apps/catalog/views.py](evidencias/EVI-22-02-views-py.png)
+
+**3. Cambiar el permiso global en `config/settings/__init__.py`**
+
+```python
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.security.authentication.HornoRaizJWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    # ... resto sin cambios
+}
+```
+
+Ahora cualquier vista sin `permission_classes` explícito pide identidad. Solo las vistas del login, refresh, logout y schema declaran `AllowAny` explícitamente.
+
+![config/settings/__init__.py](evidencias/EVI-22-03-settings.png)
+
+**4. Completar `apps/common/testing.py` con `grant` y `grant_crud`**
+
+Se agregaron dos helpers que crean la cadena completa de RBAC para un usuario, usando `resolve(path).route` para obtener el patrón real de la ruta.
+
+```python
+from django.urls import resolve
+
+from apps.common.status import RecordStatus
+from apps.security.models import Resource, ResourceRole, Role, RoleUser, User
+
+PASSWORD = "HornoRaiz-Test-1"
+
+
+def create_active_user(username="ana", email="ana@hornoraiz.test", password=PASSWORD):
+    return User.objects.create_user(
+        username=username, email=email,
+        password=password, status=RecordStatus.ACTIVE,
+    )
+
+
+def grant(user, method, path, role_name=None):
+    """Crea Role + RoleUser + Resource + ResourceRole activos."""
+    role, _created = Role.objects.get_or_create(
+        name=role_name or f"test-role-{user.pk}",
+        defaults={
+            "description": "Rol de prueba",
+            "status": RecordStatus.ACTIVE,
+        },
+    )
+    RoleUser.objects.get_or_create(
+        role=role, user=user,
+        defaults={"status": RecordStatus.ACTIVE},
+    )
+    match = resolve(path)
+    resource, _created = Resource.objects.get_or_create(
+        method=method.upper(),
+        route=match.route,
+        defaults={
+            "name": f"{method.upper()} {match.route}",
+            "status": RecordStatus.ACTIVE,
+        },
+    )
+    ResourceRole.objects.get_or_create(
+        resource=resource, role=role,
+        defaults={"status": RecordStatus.ACTIVE},
+    )
+    return role
+
+
+def grant_crud(user, collection, detail):
+    """Concede GET y POST en el collection, y GET/PUT/PATCH/DELETE en el detail."""
+    grant(user, "GET", collection)
+    grant(user, "POST", collection)
+    for method in ("GET", "PUT", "PATCH", "DELETE"):
+        grant(user, method, detail)
+```
+
+`resolve(path).route` devuelve el patrón `api/catalog/products/<int:pk>/`, no el path con el id sustituido. Eso es lo que hace que una sola fila de `Resource` autorice cualquier id.
+
+![apps/common/testing.py](evidencias/EVI-22-04-common-testing.png)
+
+**5. Adaptar los tests de `apps/catalog`**
+
+Cada clase de test hereda de `AuthenticatedCatalogTest`, que crea el usuario, concede los métodos y llama `force_authenticate`.
+
+```python
+from rest_framework.test import APITestCase
+from apps.common.testing import create_active_user, grant, grant_crud
+
+
+class AuthenticatedCatalogTest(APITestCase):
+    def setUp(self):
+        self.user = create_active_user(
+            username="catalog-user",
+            email="catalog@hornoraiz.test",
+        )
+        grant_crud(
+            self.user,
+            "/api/catalog/products/",
+            "/api/catalog/products/1/",
+        )
+        grant(self.user, "GET", "/api/catalog/products/available/")
+        self.client.force_authenticate(user=self.user)
+
+
+class ProductApiTests(AuthenticatedCatalogTest):
+    # ... los 4 tests existentes sin cambios ...
+```
+
+![apps/catalog/tests.py](evidencias/EVI-22-05-catalog-tests.png)
+
+**6. Adaptar los tests de `apps/production`**
+
+```python
+class ProductionApiTests(APITestCase):
+    def setUp(self):
+        self.user = create_active_user(
+            username="prod-user",
+            email="prod@hornoraiz.test",
+        )
+        grant_crud(
+            self.user,
+            "/api/production/production-batches/",
+            "/api/production/production-batches/1/",
+        )
+        grant_crud(
+            self.user,
+            "/api/production/supply-movements/",
+            "/api/production/supply-movements/1/",
+        )
+        self.client.force_authenticate(user=self.user)
+        # ... datos base ...
+```
+
+![apps/production/tests.py](evidencias/EVI-22-06-production-tests.png)
+
+**7. Adaptar los tests de `apps/sale`**
+
+La venta no concede PUT ni PATCH: el detalle no los publica.
+
+```python
+class AuthenticatedSaleTest(APITestCase):
+    def setUp(self):
+        self.user = create_active_user(
+            username="sale-user",
+            email="sale@hornoraiz.test",
+        )
+        grant(self.user, "GET", "/api/sale/sales/")
+        grant(self.user, "POST", "/api/sale/sales/")
+        grant(self.user, "GET", "/api/sale/sales/1/")
+        grant(self.user, "DELETE", "/api/sale/sales/1/")
+        self.client.force_authenticate(user=self.user)
+```
+
+![apps/sale/tests.py](evidencias/EVI-22-07-sale-tests.png)
+
+**8. Ejecutar la suite completa**
+
+```bash
+python manage.py check
+python manage.py test apps.catalog apps.production apps.sale apps.security
+```
+
+Resultado:
+```
+System check identified no issues (0 silenced).
+
+Found 48 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+................................................
+----------------------------------------------------------------------
+Ran 48 tests in 41.148s
+
+OK
+Destroying test database for alias 'default'...
+```
+
+Los 48 son: 5 de catálogo, 4 de producción, 9 de ventas (con RBAC) y 30 de seguridad (motor, refresh token, RBAC models, login, refresh, logout, perfil y `HasResourceAccess`).
+
+![Suite completa PASS](evidencias/EVI-22-08-full-suite.png)
+
+**9. Verificar los tres accesos con curl**
+
+```bash
+python manage.py runserver 0.0.0.0:8000
+```
+
+En otra terminal:
+
+```bash
+# Sin token -> 401 (no hay identidad)
+curl -s -o /dev/null -w "GET products: HTTP %{http_code}\n" http://127.0.0.1:8000/api/catalog/products/
+
+# Login
+LOGIN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "HornoRaiz2026!"}')
+ACCESS=$(echo "$LOGIN" | python3 -c "import sys, json; print(json.load(sys.stdin)['access'])")
+
+# Con token sin concesión -> 403 (identidad sí, autorización no)
+curl -s -o /dev/null -w "GET products: HTTP %{http_code}\n" \
+  -H "Authorization: Bearer $ACCESS" \
+  http://127.0.0.1:8000/api/catalog/products/
+
+curl -s -o /dev/null -w "POST products: HTTP %{http_code}\n" \
+  -X POST -H "Authorization: Bearer $ACCESS" \
+  -H "Content-Type: application/json" \
+  -d '{"sku":"TEST-ISS22","name":"Producto ISS22","price":"100.00"}' \
+  http://127.0.0.1:8000/api/catalog/products/
+
+# Perfil (JWT con token, sin RBAC) -> 200
+curl -s -o /dev/null -w "GET profile: HTTP %{http_code}\n" \
+  -H "Authorization: Bearer $ACCESS" \
+  http://127.0.0.1:8000/api/auth/profile/
+```
+
+Resultado:
+```
+GET products: HTTP 401     ← sin identidad
+GET products: HTTP 403     ← identidad sí, concesión no
+POST products: HTTP 403    ← identidad sí, concesión no
+GET profile: HTTP 200      ← perfil no consulta la matriz RBAC
+```
+
+Esto confirma los tres accesos:
+
+```
+OPEN                    login, refresh, logout, schema           sin token
+JWT con token           perfil                                  200 sin RBAC
+JWT con token + RBAC    catalog, production, sale               403 sin concesión
+```
+
+![Prueba con curl](evidencias/EVI-22-09-curl.png)
+
+### Explicación
+
+Este ISS no cambia la forma de la venta ni del cliente. Cambia quién puede ejecutarla. Un test que antes hacía POST directo ahora falla con `401` o `403` hasta que concede el método y la ruta. Ese fallo es la prueba de que el cierre quedó puesto.
+
+```
+Fase I — solo negocio          Fase II — este ISS
+sin JWT                        JWT con token + RBAC
+POST /api/catalog/products/    el mismo POST, ahora con concesión
+```
+
+Los tres accesos quedan así:
+
+```
+OPEN                    login, refresh, logout, esquema
+                        AllowAny y authentication_classes vacías
+
+JWT con token           perfil
+                        IsAuthenticated, sin HasResourceAccess
+
+JWT con token + RBAC    catalog, production, sale
+                        IsAuthenticated + HasResourceAccess
+```
+
+`apps/common/testing.py` crea el rol de prueba, el `RoleUser`, el `Resource` a partir de `resolve(path).route` y el `ResourceRole`, todos `active`. La cadena de autorización se construye de extremo a extremo en cada test.
+
+### Criterios de aceptación
+
+- **AC-22-01:** los tests de catálogo, producción y ventas siguen PASS con usuario concedido.
+- **AC-22-02:** sin concesión, `/api/catalog/products/` responde 403.
+- **AC-22-03:** el perfil sigue sin consultar la matriz RBAC (sigue en JWT con token).
+
+### Verificación
+
+```bash
+python manage.py check
+python manage.py test apps.catalog apps.production apps.sale apps.security
+curl http://127.0.0.1:8000/api/catalog/products/
+```
+
+![Suite completa PASS](evidencias/EVI-22-08-full-suite.png)
+
+![Prueba con curl](evidencias/EVI-22-09-curl.png)
+
+### GATE
+
+| **AC**   | **Verificación**                       | **Evidencia** | **Resultado** |
+|----------|----------------------------------------|---------------|---------------|
+| AC-22-01 | negocio con RBAC → 48 tests OK         | EVI-22-08     | PASS          |
+| AC-22-02 | deny by default → 403 sin concesión    | EVI-22-09     | PASS          |
+| AC-22-03 | perfil sigue en JWT con token          | EVI-22-09     | PASS          |

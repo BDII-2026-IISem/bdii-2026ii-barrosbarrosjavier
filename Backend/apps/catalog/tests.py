@@ -1,60 +1,29 @@
-from decimal import Decimal
-
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.catalog.models import Product
-from apps.common.status import RecordStatus
-from apps.common.testing import PASSWORD, create_active_user
-from apps.security.models import (
-    HttpMethod,
-    Resource,
-    ResourceRole,
-    Role,
-    RoleUser,
-)
-
-
-def grant(user, method, route, name="test-grant"):
-    """Crea Resource + Role + ResourceRole + RoleUser activos para el user."""
-    resource = Resource.objects.create(
-        name=name,
-        method=method,
-        route=route,
-        status=RecordStatus.ACTIVE,
-    )
-    role = Role.objects.create(name=f"role-{method}-{route}", status=RecordStatus.ACTIVE)
-    ResourceRole.objects.create(
-        resource=resource, role=role, status=RecordStatus.ACTIVE,
-    )
-    RoleUser.objects.create(
-        role=role, user=user, status=RecordStatus.ACTIVE,
-    )
+from apps.common.testing import PASSWORD, create_active_user, grant, grant_crud
 
 
 class AuthenticatedCatalogTest(APITestCase):
-    """Base: crea user y le da los permisos RBAC del catálogo."""
+    """Base: crea user y le da los permisos RBAC del catálogo de productos."""
 
     def setUp(self):
         self.user = create_active_user(
             username="catalog-user",
             email="catalog@hornoraiz.test",
         )
-        # Conceder TODOS los métodos que usan los tests de Product
-        grant(self.user, HttpMethod.GET, "api/catalog/products/", "list-products")
-        grant(self.user, HttpMethod.POST, "api/catalog/products/", "create-product")
-        grant(self.user, HttpMethod.GET, "api/catalog/products/<int:pk>/", "detail-product")
-        grant(self.user, HttpMethod.PUT, "api/catalog/products/<int:pk>/", "update-product")
-        grant(self.user, HttpMethod.PATCH, "api/catalog/products/<int:pk>/", "patch-product")
-        grant(self.user, HttpMethod.DELETE, "api/catalog/products/<int:pk>/", "delete-product")
-
-        login = self.client.post(
-            "/api/auth/login/",
-            {"username": "catalog-user", "password": PASSWORD},
-            format="json",
+        grant_crud(
+            self.user,
+            "/api/catalog/products/",
+            "/api/catalog/products/1/",
         )
-        self.access = login.data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self.access}")
+        grant(
+            self.user,
+            "GET",
+            "/api/catalog/products/available/",
+        )
+        self.client.force_authenticate(user=self.user)
 
 
 class ProductApiTests(AuthenticatedCatalogTest):
@@ -135,14 +104,12 @@ class ProductApiTests(AuthenticatedCatalogTest):
 
 class AvailableProductApiTests(AuthenticatedCatalogTest):
     def test_available_filter(self):
-        # Crear un producto activo
         self.client.post(
             "/api/catalog/products/",
             {"sku": "AV-001", "name": "Pan activo",
              "description": "Disponible", "price": "1000.00"},
             format="json",
         )
-        # Crear un producto y desactivarlo
         inactive = self.client.post(
             "/api/catalog/products/",
             {"sku": "AV-002", "name": "Pan inactivo",
@@ -152,16 +119,13 @@ class AvailableProductApiTests(AuthenticatedCatalogTest):
         pk = inactive.data["id"]
         self.client.delete(f"/api/catalog/products/{pk}/")
 
-        # La lista de disponibles incluye solo el activo (endpoint open)
         available = self.client.get("/api/catalog/products/available/")
         self.assertEqual(available.status_code, status.HTTP_200_OK)
         self.assertEqual(len(available.data), 1)
         self.assertEqual(available.data[0]["sku"], "AV-001")
 
-        # La fila del inactivo sigue en la tabla
         stored = Product.objects.get(pk=pk)
         self.assertEqual(stored.status, False)
 
-        # El endpoint normal sí lo lista
         all_products = self.client.get("/api/catalog/products/")
         self.assertGreaterEqual(len(all_products.data), 2)
