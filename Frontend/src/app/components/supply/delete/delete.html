@@ -1,0 +1,26 @@
+<div class="w-full max-w-xl self-stretch mx-auto p-6 font-normal text-gray-800">
+  <h2 class="text-2xl font-bold mb-4">Eliminar insumo</h2>
+  @if (supply(); as s) {
+    <div class="bg-white rounded-xl shadow p-6 flex flex-col gap-4">
+      <p>Se eliminará <b>definitivamente</b> este insumo. Esta acción no se puede deshacer.</p>
+      <dl class="grid grid-cols-3 gap-y-2">
+        <dt class="text-gray-500">Código</dt><dd class="col-span-2 font-mono">{{ s.code }}</dd>
+        <dt class="text-gray-500">Nombre</dt><dd class="col-span-2">{{ s.name }}</dd>
+        <dt class="text-gray-500">Unidad</dt><dd class="col-span-2">{{ s.unitOfMeasure }}</dd>
+        <dt class="text-gray-500">Stock mínimo</dt><dd class="col-span-2">{{ s.minStock | number: '1.2-2' }}</dd>
+        <dt class="text-gray-500">Estado</dt>
+        <dd class="col-span-2"><p-tag [value]="s.status ? 'Activo' : 'Inactivo'" [severity]="s.status ? 'success' : 'danger'" /></dd>
+      </dl>
+      @if (error()) {
+        <p-message severity="error">{{ error() }}</p-message>
+      }
+      <div class="flex justify-end gap-2">
+        <p-button label="Cancelar" severity="secondary" [outlined]="true" (onClick)="cancelar()" />
+        <p-button label="Eliminar definitivamente" icon="pi pi-trash" severity="danger" [loading]="deleting()"
+          (onClick)="confirmDelete()" />
+      </div>
+    </div>
+  } @else {
+    <p class="text-gray-500 flex items-center gap-2"><i class="pi pi-spinner pi-spin"></i> Cargando…</p>
+  }
+</div>

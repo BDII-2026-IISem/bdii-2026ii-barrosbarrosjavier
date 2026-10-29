@@ -1,0 +1,25 @@
+<div class="w-full flex items-center justify-between px-4">
+  <div class="flex items-center gap-2">
+    <i class="pi pi-shop text-xl"></i>
+    <span>{{ appName }} · Producción y venta de panadería</span>
+  </div>
+
+  <div class="flex items-center gap-2">
+    @if (isLoggedIn) {
+      <button type="button" aria-label="Notificaciones"
+        class="text-orange-500 bg-gray-100 hover:bg-gray-200 rounded shadow hover:shadow-lg flex items-center justify-center w-10 h-10">
+        <p-overlaybadge value="2">
+          <i class="pi pi-bell text-2xl"></i>
+        </p-overlaybadge>
+      </button>
+    }
+
+    <button type="button" aria-label="Menú de usuario"
+      class="text-orange-500 bg-gray-100 hover:bg-gray-200 rounded shadow hover:shadow-lg w-10 h-10 flex items-center justify-center"
+      (click)="menu.toggle($event)">
+      <i class="pi pi-user text-xl"></i>
+    </button>
+  </div>
+</div>
+
+<p-tieredmenu #menu [model]="items" [popup]="true" />

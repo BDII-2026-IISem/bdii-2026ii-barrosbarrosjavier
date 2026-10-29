@@ -1,0 +1,41 @@
+<div class="w-full max-w-3xl self-stretch mx-auto p-6 font-normal text-gray-800">
+  <h2 class="text-2xl font-bold mb-4">Editar insumo #{{ supplyId }}</h2>
+  @if (loading()) {
+    <p class="text-gray-500 flex items-center gap-2"><i class="pi pi-spinner pi-spin"></i> Cargando…</p>
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="submit()" class="bg-white rounded-xl shadow p-6 flex flex-col gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="flex flex-col gap-1">
+        <label for="code" class="text-sm font-medium">Código</label>
+        <input pInputText id="code" formControlName="code" placeholder="INS-010" />
+        @if (getFieldError('code'); as e) { <small class="text-red-600">{{ e }}</small> }
+      </div>
+      <div class="flex flex-col gap-1">
+        <label for="name" class="text-sm font-medium">Nombre</label>
+        <input pInputText id="name" formControlName="name" placeholder="Harina de trigo" />
+        @if (getFieldError('name'); as e) { <small class="text-red-600">{{ e }}</small> }
+      </div>
+      <div class="flex flex-col gap-1">
+        <label for="unitOfMeasure" class="text-sm font-medium">Unidad de medida</label>
+        <input pInputText id="unitOfMeasure" formControlName="unitOfMeasure" placeholder="kg" />
+        @if (getFieldError('unitOfMeasure'); as e) { <small class="text-red-600">{{ e }}</small> }
+      </div>
+      <div class="flex flex-col gap-1">
+        <label for="minStock" class="text-sm font-medium">Stock mínimo</label>
+        <p-inputnumber inputId="minStock" formControlName="minStock" [minFractionDigits]="2" [maxFractionDigits]="2"
+          locale="es-CO" styleClass="w-full" inputStyleClass="w-full" />
+        @if (getFieldError('minStock'); as e) { <small class="text-red-600">{{ e }}</small> }
+      </div>
+      <div class="flex flex-col gap-1">
+        <label for="status" class="text-sm font-medium">Estado</label>
+        <p-select inputId="status" formControlName="status" [options]="statusOptions" optionLabel="label"
+          optionValue="value" styleClass="w-full" />
+      </div>
+    </div>
+      <div class="flex justify-end gap-2">
+        <p-button type="button" label="Cancelar" severity="secondary" [outlined]="true" (onClick)="cancelar()" />
+        <p-button type="submit" label="Actualizar" icon="pi pi-check" [loading]="saving()" />
+      </div>
+    </form>
+  }
+</div>

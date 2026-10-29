@@ -1,0 +1,55 @@
+<div class="w-full self-stretch p-6 font-normal text-gray-800">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-2xl font-bold">Gestión de Insumos</h2>
+    <div class="flex gap-2">
+      <p-button icon="pi pi-refresh" severity="secondary" [outlined]="true" (onClick)="loadSupplies()"
+        pTooltip="Actualizar" ariaLabel="Actualizar" />
+      <p-button label="Nuevo insumo" icon="pi pi-plus" routerLink="/supplies/new" />
+    </div>
+  </div>
+
+  <p-table [value]="supplies()" [loading]="loading()" [stripedRows]="true" [paginator]="true" [rows]="10"
+    [showCurrentPageReport]="true" currentPageReportTemplate="Mostrando {first} a {last} de {totalRecords} insumos"
+    dataKey="id">
+    <ng-template #header>
+      <tr>
+        <th pSortableColumn="id">ID <p-sort-icon field="id" /></th>
+        <th pSortableColumn="code">Código <p-sort-icon field="code" /></th>
+        <th pSortableColumn="name">Nombre <p-sort-icon field="name" /></th>
+        <th>Unidad</th>
+        <th class="text-right">Stock mínimo</th>
+        <th>Estado</th>
+        <th class="text-center">Acciones</th>
+      </tr>
+    </ng-template>
+    <ng-template #body let-supply>
+      <tr>
+        <td>{{ supply.id }}</td>
+        <td class="font-mono">{{ supply.code }}</td>
+        <td>{{ supply.name }}</td>
+        <td>{{ supply.unitOfMeasure }}</td>
+        <td class="text-right">{{ supply.minStock | number: '1.2-2' }}</td>
+        <td>
+          <p-tag [value]="supply.status ? 'Activo' : 'Inactivo'" [severity]="supply.status ? 'success' : 'danger'" />
+        </td>
+        <td class="text-center whitespace-nowrap">
+          <p-button icon="pi pi-pencil" [rounded]="true" [text]="true" [routerLink]="['/supplies/edit', supply.id]"
+            pTooltip="Editar" ariaLabel="Editar" />
+          @if (supply.status) {
+            <p-button icon="pi pi-ban" [rounded]="true" [text]="true" severity="warn" (onClick)="deactivateSupply(supply)"
+              pTooltip="Desactivar" ariaLabel="Desactivar" />
+          }
+          <p-button icon="pi pi-trash" [rounded]="true" [text]="true" severity="danger"
+            [routerLink]="['/supplies/delete', supply.id]" pTooltip="Eliminar" ariaLabel="Eliminar" />
+        </td>
+      </tr>
+    </ng-template>
+    <ng-template #emptymessage>
+      <tr>
+        <td colspan="7" class="text-center text-gray-500 py-6">No hay insumos para mostrar.</td>
+      </tr>
+    </ng-template>
+  </p-table>
+
+  <p-confirmdialog />
+</div>

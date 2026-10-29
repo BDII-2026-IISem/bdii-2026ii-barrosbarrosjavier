@@ -1,0 +1,18 @@
+<div class="w-full max-w-md bg-white rounded-xl shadow p-6 text-gray-800 font-normal">
+  <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><i class="pi pi-user"></i> Mi perfil</h2>
+  @if (user(); as u) {
+    <dl class="grid grid-cols-3 gap-y-2">
+      <dt class="text-gray-500">Usuario</dt><dd class="col-span-2">{{ u.username }}</dd>
+      <dt class="text-gray-500">Nombre</dt><dd class="col-span-2">{{ u.firstName }} {{ u.lastName }}</dd>
+      <dt class="text-gray-500">Correo</dt><dd class="col-span-2">{{ u.email }}</dd>
+      <dt class="text-gray-500">Estado</dt>
+      <dd class="col-span-2">
+        <p-tag [value]="u.status === 'active' ? 'Activo' : 'Inactivo'" [severity]="u.status === 'active' ? 'success' : 'danger'" />
+      </dd>
+    </dl>
+  } @else if (error()) {
+    <p class="text-red-600">{{ error() }}</p>
+  } @else {
+    <p class="text-gray-500">Cargando…</p>
+  }
+</div>
