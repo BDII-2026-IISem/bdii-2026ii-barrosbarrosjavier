@@ -121,8 +121,7 @@ Frontend/
 ├── .postcssrc.json                 (plugin @tailwindcss/postcss)
 ├── angular.json
 ├── package.json
-├── bitacora-frontend.md            (este documento)
-├── evidencias/                     (capturas F-xx)
+├── evidencias/                     (capturas F-xx; este documento está en la raíz del repositorio)
 └── src/
     ├── index.html                  (lang="es", translate="no")
     ├── styles.css                  (Tailwind 4 y PrimeIcons)
@@ -195,7 +194,7 @@ npm install -g @angular/cli@22
 ng version
 ```
 
-![F-00 Angular CLI 22.2.4, Node 22.23.3 y npm 10.9.9](evidencias/F-00-01-angular-cli.png)
+![F-00 Angular CLI 22.2.4, Node 22.23.3 y npm 10.9.9](Frontend/evidencias/F-00-01-angular-cli.png)
 *Angular CLI 22.2.4, Node 22.23.3 y npm 10.9.9*
 
 
@@ -227,10 +226,10 @@ npx @angular/cli@22 new front-storelab-express-ii \
 }
 ```
 
-![F-01 `ng new` dentro de `Frontend/`](evidencias/F-01-01-ng-new.png)
+![F-01 `ng new` dentro de `Frontend/`](Frontend/evidencias/F-01-01-ng-new.png)
 *`ng new` dentro de `Frontend/`, con Tailwind, rutas y sin SSR*
 
-![F-01 `.postcssrc.json` y `styles.css` con Tailwind](evidencias/F-01-06-postcss-y-styles.png)
+![F-01 `.postcssrc.json` y `styles.css` con Tailwind](Frontend/evidencias/F-01-06-postcss-y-styles.png)
 *`.postcssrc.json` y `styles.css` con Tailwind*
 
 
@@ -276,10 +275,10 @@ En `styles.css` se agregó la hoja de PrimeIcons:
 @import 'primeicons/primeicons.css';
 ```
 
-![F-02 Instalación de PrimeNG, temas, iconos y CDK](evidencias/F-01-02-instalar-primeng.png)
+![F-02 Instalación de PrimeNG, temas, iconos y CDK](Frontend/evidencias/F-01-02-instalar-primeng.png)
 *Instalación de PrimeNG, `@primeuix/themes`, PrimeIcons y `@angular/cdk`*
 
-![F-02 `app.config.ts` con PrimeNG y tema Aura](evidencias/F-01-03-app-config.png)
+![F-02 `app.config.ts` con PrimeNG y tema Aura](Frontend/evidencias/F-01-03-app-config.png)
 *`app.config.ts` con PrimeNG y tema Aura (aquí aún con los interceptores sin crear)*
 
 
@@ -300,10 +299,10 @@ export const environment = {
 };
 ```
 
-![F-03 `environment.ts`, con el backend en marcha](evidencias/F-01-04-environment-ts.png)
+![F-03 `environment.ts`, con el backend en marcha](Frontend/evidencias/F-01-04-environment-ts.png)
 *`environment.ts`, con el backend en marcha en el puerto 8000*
 
-![F-03 `environment.development.ts`](evidencias/F-01-05-environment-development.png)
+![F-03 `environment.development.ts`](Frontend/evidencias/F-01-05-environment-development.png)
 *`environment.development.ts`*
 
 > En estas capturas `appName` todavía decía `StoreLab Django`; se cambió a `HornoRaíz` en ambos archivos.
@@ -362,16 +361,16 @@ export class App {
 }
 ```
 
-![F-04 Generación de los tres componentes con `ng g c`](evidencias/F-04-01-ng-generate-layout.png)
+![F-04 Generación de los tres componentes con `ng g c`](Frontend/evidencias/F-04-01-ng-generate-layout.png)
 *Generación de los tres componentes con `ng g c` (salida obtenida en una copia del proyecto sin `components/`, para no sobrescribir los ya creados)*
 
-![F-04 `header.ts` y `header.html`](evidencias/F-04-02-header.png)
+![F-04 `header.ts` y `header.html`](Frontend/evidencias/F-04-02-header.png)
 *`header.ts` y `header.html`*
 
-![F-04 `footer.ts` y `footer.html`](evidencias/F-04-03-footer.png)
+![F-04 `footer.ts` y `footer.html`](Frontend/evidencias/F-04-03-footer.png)
 *`footer.ts` y `footer.html`*
 
-![F-04 `app.ts` importando los tres componentes](evidencias/F-04-04-app-ts.png)
+![F-04 `app.ts` importando los tres componentes](Frontend/evidencias/F-04-04-app-ts.png)
 *`app.ts` importando los tres componentes*
 
 
@@ -404,10 +403,10 @@ Guía, pasos 13 y 14. Se reemplazó la página de bienvenida de Angular por la e
 
 El `<h1>Desarrollo Web</h1>` del paso 6 de la guía (prueba de Tailwind) se dejó dentro del contenido central.
 
-![F-05 `app.html` con la estructura de la página](evidencias/F-05-01-app-html.png)
+![F-05 `app.html` con la estructura de la página](Frontend/evidencias/F-05-01-app-html.png)
 *`app.html` con la estructura de la página*
 
-![F-05 `ng s` compilando sin errores](evidencias/F-05-02-ng-serve.png)
+![F-05 `ng s` compilando sin errores](Frontend/evidencias/F-05-02-ng-serve.png)
 *`ng s` compilando sin errores*
 
 
@@ -460,13 +459,13 @@ export class Aside implements OnInit {
 </div>
 ```
 
-![F-06 `aside.ts` con los grupos del menú](evidencias/F-06-01-aside-ts.png)
+![F-06 `aside.ts` con los grupos del menú](Frontend/evidencias/F-06-01-aside-ts.png)
 *`aside.ts` con los grupos del menú*
 
-![F-06 `aside.html` con `p-panelmenu`](evidencias/F-06-02-aside-html.png)
+![F-06 `aside.html` con `p-panelmenu`](Frontend/evidencias/F-06-02-aside-html.png)
 *`aside.html` con `p-panelmenu`*
 
-![F-06 Plantilla completa en el navegador con el menú desplegado](evidencias/F-06-03-plantilla-navegador.png)
+![F-06 Plantilla completa en el navegador con el menú desplegado](Frontend/evidencias/F-06-03-plantilla-navegador.png)
 *Plantilla completa en el navegador, con el grupo Catálogo desplegado*
 
 Abajo a la derecha aparece el aviso rojo **"Invalid PrimeUI License"**: PrimeNG 22 lo muestra cuando no se configura una licencia. La licencia gratuita *Community* se pide en el sitio de PrimeUI y se pasa en `providePrimeNG({ license })`. Queda pendiente (sección 10).
@@ -482,7 +481,7 @@ npx ng test --no-watch
 
 Resultado: **4 archivos y 6 pruebas OK**.
 
-![F-07 `ng test`: 4 archivos y 6 pruebas OK](evidencias/F-07-01-ng-test.png)
+![F-07 `ng test`: 4 archivos y 6 pruebas OK](Frontend/evidencias/F-07-01-ng-test.png)
 *`ng test`: 4 archivos y 6 pruebas OK*
 
 
@@ -494,7 +493,7 @@ Resultado: **4 archivos y 6 pruebas OK**.
 npx ng build
 ```
 
-![F-08 `ng build` sin errores](evidencias/F-08-01-ng-build.png)
+![F-08 `ng build` sin errores](Frontend/evidencias/F-08-01-ng-build.png)
 *`ng build` sin errores, con el aviso de presupuesto*
 
 ### F-09. Componentes y rutas de insumos
@@ -519,13 +518,13 @@ Rutas de insumos en `app.routes.ts` (el archivo completo está en F-11):
 
 En el menú, la opción Insumos recibe `routerLink: '/supplies'`.
 
-![F-09 Generación de los cuatro componentes de insumos](evidencias/F-09-01-ng-generate-insumos.png)
+![F-09 Generación de los cuatro componentes de insumos](Frontend/evidencias/F-09-01-ng-generate-insumos.png)
 *Generación de los cuatro componentes de insumos*
 
-![F-09 `getall.ts` y `getall.html` de insumos](evidencias/F-09-02-insumos-getall.png)
+![F-09 `getall.ts` y `getall.html` de insumos](Frontend/evidencias/F-09-02-insumos-getall.png)
 *`getall.ts` (con `standalone: true`) y `getall.html` de insumos*
 
-![F-09 Clic en Catálogo › Insumos abre /supplies](evidencias/F-09-03-insumos-navegador.png)
+![F-09 Clic en Catálogo › Insumos abre /supplies](Frontend/evidencias/F-09-03-insumos-navegador.png)
 *Clic en Catálogo › Insumos: la URL cambia a `/supplies` y se carga el `getall` de insumos*
 
 
@@ -540,10 +539,10 @@ ng g c components/product/update
 ng g c components/product/delete
 ```
 
-![F-10 Generación de los cuatro componentes de productos](evidencias/F-10-01-ng-generate-productos.png)
+![F-10 Generación de los cuatro componentes de productos](Frontend/evidencias/F-10-01-ng-generate-productos.png)
 *Generación de los cuatro componentes de productos*
 
-![F-10 Clic en Catálogo › Productos abre /products](evidencias/F-10-02-productos-navegador.png)
+![F-10 Clic en Catálogo › Productos abre /products](Frontend/evidencias/F-10-02-productos-navegador.png)
 *Desde `/sales`, clic en Catálogo › Productos: la URL cambia a `/products`*
 
 
@@ -571,19 +570,19 @@ items: [{ label: 'Ventas', icon: 'pi pi-fw pi-receipt', routerLink: '/sales' }],
 
 En `app.html` la zona de contenido pasó de `flex items-center` a `flex flex-col items-center gap-4`, para que el título quede encima del componente de la ruta y no al lado.
 
-![F-11 Generación de los cuatro componentes de ventas](evidencias/F-11-01-ng-generate-ventas.png)
+![F-11 Generación de los cuatro componentes de ventas](Frontend/evidencias/F-11-01-ng-generate-ventas.png)
 *Generación de los cuatro componentes de ventas*
 
-![F-11 `app.routes.ts` con alias y 13 rutas](evidencias/F-11-02-app-routes.png)
+![F-11 `app.routes.ts` con alias y 13 rutas](Frontend/evidencias/F-11-02-app-routes.png)
 *`app.routes.ts` con los imports con alias y las 13 rutas*
 
-![F-11 `aside.ts` con `routerLink`](evidencias/F-11-03-aside-routerlink.png)
+![F-11 `aside.ts` con `routerLink`](Frontend/evidencias/F-11-03-aside-routerlink.png)
 *`aside.ts` con `routerLink` en Productos, Insumos y Ventas*
 
-![F-11 Clic en Ventas › Ventas abre /sales](evidencias/F-11-04-ventas-navegador.png)
+![F-11 Clic en Ventas › Ventas abre /sales](Frontend/evidencias/F-11-04-ventas-navegador.png)
 *Clic en Ventas › Ventas: la URL cambia a `/sales`*
 
-![F-11 /sales/edit/1 abre el componente update](evidencias/F-11-05-venta-editar-navegador.png)
+![F-11 /sales/edit/1 abre el componente update](Frontend/evidencias/F-11-05-venta-editar-navegador.png)
 *`/sales/edit/1` abre el componente `update` ("update works!")*
 
 
@@ -597,19 +596,19 @@ Al correr las pruebas, falló `app.spec.ts`: el menú ahora tiene `routerLink`, 
 providers: [provideRouter([]), providePrimeNG()],
 ```
 
-![F-12 `/` redirige a /products](evidencias/F-12-01-raiz-redirige.png)
+![F-12 `/` redirige a /products](Frontend/evidencias/F-12-01-raiz-redirige.png)
 *Al abrir `localhost:4200/` la aplicación redirige a `/products`*
 
-![F-12 `app.routes.spec.ts`](evidencias/F-12-02-routes-spec.png)
+![F-12 `app.routes.spec.ts`](Frontend/evidencias/F-12-02-routes-spec.png)
 *`app.routes.spec.ts`*
 
-![F-12 `ng test` falla: falta el router en `app.spec.ts`](evidencias/F-12-03-ng-test-falla.png)
+![F-12 `ng test` falla: falta el router en `app.spec.ts`](Frontend/evidencias/F-12-03-ng-test-falla.png)
 *`ng test` falla: `NG0201: No provider found for ActivatedRoute` (final de la salida)*
 
-![F-12 `app.spec.ts` con `provideRouter([])`](evidencias/F-12-04-app-spec-corregido.png)
+![F-12 `app.spec.ts` con `provideRouter([])`](Frontend/evidencias/F-12-04-app-spec-corregido.png)
 *`app.spec.ts` corregido con `provideRouter([])`*
 
-![F-12 `ng test`: 17 archivos y 22 pruebas OK](evidencias/F-12-05-ng-test-ok.png)
+![F-12 `ng test`: 17 archivos y 22 pruebas OK](Frontend/evidencias/F-12-05-ng-test-ok.png)
 *`ng test`: 17 archivos y 22 pruebas OK*
 
 
@@ -617,7 +616,7 @@ providers: [provideRouter([]), providePrimeNG()],
 
 `ng build` sigue sin errores. El paquete inicial pasó de 596 kB a 600 kB, con el mismo aviso de presupuesto: las 12 pantallas están importadas directamente en `app.routes.ts`, como en la guía, así que todas viajan en el paquete inicial.
 
-![F-13 `ng build` sin errores](evidencias/F-13-01-ng-build.png)
+![F-13 `ng build` sin errores](Frontend/evidencias/F-13-01-ng-build.png)
 *`ng build` sin errores, con el aviso de presupuesto (599,52 kB)*
 
 ### F-14. Componentes, servicio, guard, interceptor y modelos de autenticación
@@ -642,13 +641,13 @@ Los modelos (`models/auth.ts`) siguen el contrato del backend Django, que respon
 
 La guía tiene además `RegisterI` y `RegisterResponseI`; no aplican porque no hay registro (ver sección 3).
 
-![F-14 Generación del login y del perfil](evidencias/F-14-01-ng-generate-auth.png)
+![F-14 Generación del login y del perfil](Frontend/evidencias/F-14-01-ng-generate-auth.png)
 *Generación de los componentes `login` y `profile`*
 
-![F-14 Generación del servicio, el guard y el interceptor](evidencias/F-14-02-ng-generate-servicios.png)
+![F-14 Generación del servicio, el guard y el interceptor](Frontend/evidencias/F-14-02-ng-generate-servicios.png)
 *Generación del servicio, el guard y el interceptor*
 
-![F-14 `models/auth.ts`](evidencias/F-14-03-modelos-auth.png)
+![F-14 `models/auth.ts`](Frontend/evidencias/F-14-03-modelos-auth.png)
 *`models/auth.ts` con el contrato de Django*
 
 
@@ -683,13 +682,13 @@ export const authGuard: CanActivateFn = () => {
 };
 ```
 
-![F-15 `services/auth.ts`](evidencias/F-15-01-auth-service.png)
+![F-15 `services/auth.ts`](Frontend/evidencias/F-15-01-auth-service.png)
 *`services/auth.ts`*
 
-![F-15 Interceptor y guard](evidencias/F-15-02-interceptor-y-guard.png)
+![F-15 Interceptor y guard](Frontend/evidencias/F-15-02-interceptor-y-guard.png)
 *`auth-interceptor.ts` y `auth-guard.ts`*
 
-![F-15 `app.config.ts` con `provideHttpClient` y el interceptor](evidencias/F-15-03-app-config.png)
+![F-15 `app.config.ts` con `provideHttpClient` y el interceptor](Frontend/evidencias/F-15-03-app-config.png)
 *`app.config.ts` con `provideHttpClient(withInterceptors([authInterceptor]))`*
 
 
@@ -708,19 +707,19 @@ Para probarlo se creó en el backend el usuario `demo_front` (sin permisos de ad
 python manage.py shell -c "...create_user('demo_front', ...)"   # la contraseña no se guarda en el repositorio
 ```
 
-![F-16 `login.ts`](evidencias/F-16-01-login-ts.png)
+![F-16 `login.ts`](Frontend/evidencias/F-16-01-login-ts.png)
 *`login.ts` con el formulario reactivo*
 
-![F-16 `login.html`](evidencias/F-16-02-login-html.png)
+![F-16 `login.html`](Frontend/evidencias/F-16-02-login-html.png)
 *`login.html`*
 
-![F-16 Validaciones del formulario](evidencias/F-16-04-login-validaciones.png)
+![F-16 Validaciones del formulario](Frontend/evidencias/F-16-04-login-validaciones.png)
 *Clic en "Iniciar sesión" con el formulario vacío: no se llama al backend y se muestran las validaciones*
 
-![F-16 Credenciales incorrectas](evidencias/F-16-05-login-401.png)
+![F-16 Credenciales incorrectas](Frontend/evidencias/F-16-05-login-401.png)
 *Contraseña incorrecta: Django responde 401 y se muestra el aviso*
 
-![F-16 Login correcto](evidencias/F-16-06-login-correcto.png)
+![F-16 Login correcto](Frontend/evidencias/F-16-06-login-correcto.png)
 *Login correcto con `demo_front`: entra a `/products` con la plantilla completa*
 
 
@@ -733,22 +732,22 @@ Guía 3, pasos 4, 12 y 14.
 - **Perfil** (`/profile`): llama a `GET /api/auth/profile/`, que exige el token, y muestra usuario, nombre, correo y estado.
 - **Cerrar sesión**: llama a `POST /api/auth/logout/`, borra los tokens y vuelve a `/login`.
 
-![F-17 `header.ts` y `header.html`](evidencias/F-17-01-header.png)
+![F-17 `header.ts` y `header.html`](Frontend/evidencias/F-17-01-header.png)
 *`header.ts` (menú según `authState$`) y `header.html` (campana solo con sesión)*
 
-![F-17 `app.ts` y `app.html` con el layout condicional](evidencias/F-17-02-app-condicional.png)
+![F-17 `app.ts` y `app.html` con el layout condicional](Frontend/evidencias/F-17-02-app-condicional.png)
 *`app.ts` y `app.html` con `@if (authState$ | async)`*
 
-![F-17 Menú del usuario](evidencias/F-17-03-menu-usuario.png)
+![F-17 Menú del usuario](Frontend/evidencias/F-17-03-menu-usuario.png)
 *Con sesión: campana con insignia y menú "Mi perfil" / "Cerrar sesión"*
 
-![F-17 Perfil](evidencias/F-17-04-perfil.png)
+![F-17 Perfil](Frontend/evidencias/F-17-04-perfil.png)
 *`/profile` con los datos que devuelve `GET /api/auth/profile/`*
 
-![F-17 Después de cerrar sesión](evidencias/F-17-05-logout.png)
+![F-17 Después de cerrar sesión](Frontend/evidencias/F-17-05-logout.png)
 *Después de "Cerrar sesión": vuelve a `/login` y los dos tokens quedan borrados de `localStorage`*
 
-![F-17 `profile.ts` y `profile.html`](evidencias/F-17-06-profile.png)
+![F-17 `profile.ts` y `profile.html`](Frontend/evidencias/F-17-06-profile.png)
 *`profile.ts` y `profile.html`*
 
 
@@ -763,16 +762,16 @@ Guía 3, paso 10. En `app.routes.ts`:
 
 El registro de `runserver` confirma el recorrido completo de F-16 y F-17 contra Django: login fallido (401), login correcto (200), perfil (200, dos veces porque la página se recargó con F5 y la sesión se mantuvo) y cierre de sesión (204). Las peticiones `OPTIONS` son las de CORS que hace el navegador. La hora del registro está en `America/Bogota`, la zona configurada en Django.
 
-![F-18 Ruta protegida sin sesión](evidencias/F-18-01-guard-sin-sesion.png)
+![F-18 Ruta protegida sin sesión](Frontend/evidencias/F-18-01-guard-sin-sesion.png)
 *Abrir `localhost:4200/products` sin sesión: el guard redirige a `/login`*
 
-![F-18 Ruta protegida después del logout](evidencias/F-18-02-guard-tras-logout.png)
+![F-18 Ruta protegida después del logout](Frontend/evidencias/F-18-02-guard-tras-logout.png)
 *Después del logout, `/sales/edit/1` también termina en `/login`*
 
-![F-18 `app.routes.ts` con `authGuard`](evidencias/F-18-03-app-routes.png)
+![F-18 `app.routes.ts` con `authGuard`](Frontend/evidencias/F-18-03-app-routes.png)
 *`app.routes.ts` con `login`, `profile`, `canActivate: [authGuard]` y `'**'`*
 
-![F-18 Registro de Django](evidencias/F-18-04-django-log.png)
+![F-18 Registro de Django](Frontend/evidencias/F-18-04-django-log.png)
 *Registro de `runserver` durante el recorrido: 401, 200, 200, 200 y 204*
 
 
@@ -794,13 +793,13 @@ Las pruebas existentes se ajustaron: `App`, `Header` y las rutas ahora necesitan
 
 Resultado: **22 archivos y 38 pruebas OK**. `ng build` compila; el paquete inicial sube a 844 kB por los formularios reactivos y los componentes nuevos de PrimeNG.
 
-![F-19 `test-setup.ts` y `angular.json`](evidencias/F-19-01-test-setup.png)
+![F-19 `test-setup.ts` y `angular.json`](Frontend/evidencias/F-19-01-test-setup.png)
 *`test-setup.ts` y su registro en `angular.json`*
 
-![F-19 `ng test`: 22 archivos y 38 pruebas OK](evidencias/F-19-02-ng-test.png)
+![F-19 `ng test`: 22 archivos y 38 pruebas OK](Frontend/evidencias/F-19-02-ng-test.png)
 *`ng test`: 22 archivos y 38 pruebas OK*
 
-![F-19 `ng build`](evidencias/F-19-03-ng-build.png)
+![F-19 `ng build`](Frontend/evidencias/F-19-03-ng-build.png)
 *`ng build` sin errores, con el aviso de presupuesto (844 kB)*
 
 ### F-20. Modelo, servicio y formulario de insumos
@@ -833,13 +832,13 @@ A diferencia de la guía, el servicio no arma la cabecera `Authorization`: la ag
 
 `components/supply/shared/supply-form.ts` reúne lo que comparten alta y edición: el formulario con sus validaciones (las mismas reglas de la tabla), los mensajes de error por campo y `apiErrorMessage()`, que convierte la respuesta de Django en texto (403 con el `detail` del backend, 404, y el primer mensaje de un 400).
 
-![F-20 `models/supply.ts`](evidencias/F-20-01-modelo-supply.png)
+![F-20 `models/supply.ts`](Frontend/evidencias/F-20-01-modelo-supply.png)
 *`models/supply.ts`*
 
-![F-20 `services/supply.ts`](evidencias/F-20-02-supply-service.png)
+![F-20 `services/supply.ts`](Frontend/evidencias/F-20-02-supply-service.png)
 *`services/supply.ts`*
 
-![F-20 `shared/supply-form.ts`](evidencias/F-20-03-supply-form.png)
+![F-20 `shared/supply-form.ts`](Frontend/evidencias/F-20-03-supply-form.png)
 *`shared/supply-form.ts`: formulario, mensajes y errores de Django*
 
 
@@ -851,19 +850,19 @@ Guía 4, paso 6. `p-table` con filas alternadas, paginador de 10, reporte "Mostr
 
 **Permiso RBAC.** Se creó en el backend el rol `inventario` con los recursos de insumos (sin `PUT`, que el frontend no usa) y se le asignó a `demo_front`, con el shell de Django. Después el listado carga los 4 insumos.
 
-![F-21 403 sin permiso](evidencias/F-21-01-insumos-403.png)
+![F-21 403 sin permiso](Frontend/evidencias/F-21-01-insumos-403.png)
 *Sin rol: Django responde 403 y se muestra "No tiene autorización para ejecutar esta operación."*
 
-![F-21 Rol inventario](evidencias/F-21-05-rol-inventario.png)
+![F-21 Rol inventario](Frontend/evidencias/F-21-05-rol-inventario.png)
 *Creación del rol `inventario` con los permisos de `/api/catalog/supplies/` y asignación a `demo_front`*
 
-![F-21 Listado de insumos](evidencias/F-21-02-insumos-listado.png)
+![F-21 Listado de insumos](Frontend/evidencias/F-21-02-insumos-listado.png)
 *Con el rol: listado de los 4 insumos del backend*
 
-![F-21 `getall.ts`](evidencias/F-21-03-getall-ts.png)
+![F-21 `getall.ts`](Frontend/evidencias/F-21-03-getall-ts.png)
 *`getall.ts`: carga, errores y desactivación con confirmación*
 
-![F-21 `getall.html`](evidencias/F-21-04-getall-html.png)
+![F-21 `getall.html`](Frontend/evidencias/F-21-04-getall-html.png)
 *`getall.html` con `p-table`, `p-tag` y `p-confirmdialog`*
 
 
@@ -871,19 +870,19 @@ Guía 4, paso 6. `p-table` con filas alternadas, paginador de 10, reporte "Mostr
 
 Guía 4, paso 7. Formulario reactivo con `pInputText`, `p-inputnumber` (2 decimales, formato es-CO) y `p-select` para el estado. Si el formulario es inválido marca los campos y muestra un aviso; si Django responde 400 (por ejemplo, código repetido) muestra su mensaje; si responde 201, avisa y vuelve al listado.
 
-![F-22 Validaciones](evidencias/F-22-01-crear-validaciones.png)
+![F-22 Validaciones](Frontend/evidencias/F-22-01-crear-validaciones.png)
 *Guardar con el formulario vacío: errores por campo y aviso "Formulario incompleto"*
 
-![F-22 Código repetido](evidencias/F-22-02-crear-codigo-repetido.png)
+![F-22 Código repetido](Frontend/evidencias/F-22-02-crear-codigo-repetido.png)
 *Código `INS-001` repetido: Django responde 400 "Ya existe insumo con este code."*
 
-![F-22 Alta correcta](evidencias/F-22-03-crear-ok.png)
+![F-22 Alta correcta](Frontend/evidencias/F-22-03-crear-ok.png)
 *Con el código `INS-010`: Django responde 201 y el insumo aparece en el listado*
 
-![F-22 `create.ts`](evidencias/F-22-04-create-ts.png)
+![F-22 `create.ts`](Frontend/evidencias/F-22-04-create-ts.png)
 *`create.ts`*
 
-![F-22 `create.html`](evidencias/F-22-05-create-html.png)
+![F-22 `create.html`](Frontend/evidencias/F-22-05-create-html.png)
 *`create.html`*
 
 
@@ -891,13 +890,13 @@ Guía 4, paso 7. Formulario reactivo con `pInputText`, `p-inputnumber` (2 decima
 
 Guía 4, paso 8. `/supplies/edit/:id` lee el `id` de la ruta, pide el insumo (`GET`), llena el formulario con `patchValue` (`minStock` llega como texto y se convierte a número) y guarda con `PATCH`. Mientras carga muestra un spinner. En la guía el formulario de Client exigía de nuevo la contraseña al editar; los insumos no tienen ese problema.
 
-![F-23 Formulario cargado](evidencias/F-23-01-editar-cargado.png)
+![F-23 Formulario cargado](Frontend/evidencias/F-23-01-editar-cargado.png)
 *`/supplies/edit/6` con los datos del insumo creado en F-22*
 
-![F-23 Edición guardada](evidencias/F-23-02-editar-ok.png)
+![F-23 Edición guardada](Frontend/evidencias/F-23-02-editar-ok.png)
 *Nombre "Levadura seca instantánea" y stock mínimo 750: Django responde 200*
 
-![F-23 `update.ts`](evidencias/F-23-03-update-ts.png)
+![F-23 `update.ts`](Frontend/evidencias/F-23-03-update-ts.png)
 *`update.ts`*
 
 
@@ -905,10 +904,10 @@ Guía 4, paso 8. `/supplies/edit/:id` lee el `id` de la ruta, pide el insumo (`G
 
 Corresponde a `deleteClientLogic` de la guía, que allí quedó sin usar. El botón Desactivar del listado abre `p-confirmdialog` y, al aceptar, envía `PATCH { status: false }`. El insumo sigue en la lista como Inactivo y ya no muestra el botón Desactivar.
 
-![F-24 Confirmación](evidencias/F-24-01-desactivar-confirmar.png)
+![F-24 Confirmación](Frontend/evidencias/F-24-01-desactivar-confirmar.png)
 *Confirmación antes de desactivar*
 
-![F-24 Insumo inactivo](evidencias/F-24-02-desactivado.png)
+![F-24 Insumo inactivo](Frontend/evidencias/F-24-02-desactivado.png)
 *El insumo queda Inactivo*
 
 
@@ -918,19 +917,19 @@ La guía define la ruta `clients/delete/:id` pero no muestra su componente. En H
 
 Los modelos `RecipeSupply` y `SupplyMovement` protegen al insumo (`on_delete=PROTECT`) y el backend no maneja esa excepción, así que Django responde **500** si el insumo está en uso. La pantalla lo explica y sugiere desactivarlo. Los 4 insumos del backend están en uso, así que se probó con `INS-001` (no se borró) y luego se eliminó el insumo de prueba `INS-010` (204). Al final la tabla quedó con los mismos 4 insumos del principio.
 
-![F-25 Insumo en uso](evidencias/F-25-01-eliminar-en-uso.png)
+![F-25 Insumo en uso](Frontend/evidencias/F-25-01-eliminar-en-uso.png)
 *`INS-001` está en una receta: Django responde 500 y la pantalla explica por qué no se puede eliminar*
 
-![F-25 Confirmar borrado](evidencias/F-25-02-eliminar-confirmar.png)
+![F-25 Confirmar borrado](Frontend/evidencias/F-25-02-eliminar-confirmar.png)
 *`/supplies/delete/6` con el insumo de prueba*
 
-![F-25 Insumo eliminado](evidencias/F-25-03-eliminado.png)
+![F-25 Insumo eliminado](Frontend/evidencias/F-25-03-eliminado.png)
 *Django responde 204 y el listado vuelve a tener 4 insumos*
 
-![F-25 `delete.ts` y `delete.html`](evidencias/F-25-04-delete.png)
+![F-25 `delete.ts` y `delete.html`](Frontend/evidencias/F-25-04-delete.png)
 *`delete.ts` y `delete.html`*
 
-![F-25 Registro de Django](evidencias/F-25-05-django-log.png)
+![F-25 Registro de Django](Frontend/evidencias/F-25-05-django-log.png)
 *Registro de `runserver` del recorrido F-21 a F-25: 200, 400, 201, 200 (PATCH), 200 (PATCH status), 500 (protegido) y 204*
 
 
@@ -952,16 +951,16 @@ El paquete inicial bajó a **916 kB** (queda el aviso de 500 kB); la tabla de in
 
 **Avisos globales.** `<p-toast>` se puso una sola vez en `app.html`, fuera del `@if`, para que el aviso de "Insumo creado" siga visible después de volver al listado. `app.spec.ts` necesitó `MessageService` por eso.
 
-![F-26 Error `p-sortIcon`](evidencias/F-26-01-error-sorticon.png)
+![F-26 Error `p-sortIcon`](Frontend/evidencias/F-26-01-error-sorticon.png)
 *`ng build` falla: `'p-sortIcon' is not a known element` (NG8001)*
 
-![F-26 Error de presupuesto](evidencias/F-26-02-error-presupuesto.png)
+![F-26 Error de presupuesto](Frontend/evidencias/F-26-02-error-presupuesto.png)
 *`ng build` falla: paquete inicial de 1,45 MB, por encima del límite de 1 MB*
 
-![F-26 Rutas con `loadComponent`](evidencias/F-26-03-routes-lazy.png)
+![F-26 Rutas con `loadComponent`](Frontend/evidencias/F-26-03-routes-lazy.png)
 *`app.routes.ts` con `loadComponent`*
 
-![F-26 `p-toast` global](evidencias/F-26-04-app-toast.png)
+![F-26 `p-toast` global](Frontend/evidencias/F-26-04-app-toast.png)
 *`app.ts` y `app.html` con el `p-toast` global*
 
 
@@ -980,10 +979,10 @@ Pruebas nuevas o reescritas:
 
 Resultado: **23 archivos y 42 pruebas OK**. `ng build` compila con el paquete inicial en 916 kB y una *chunk* por pantalla.
 
-![F-27 `ng test`](evidencias/F-27-01-ng-test.png)
+![F-27 `ng test`](Frontend/evidencias/F-27-01-ng-test.png)
 *`ng test`: 23 archivos y 42 pruebas OK*
 
-![F-27 `ng build`](evidencias/F-27-02-ng-build.png)
+![F-27 `ng build`](Frontend/evidencias/F-27-02-ng-build.png)
 *`ng build` con carga perezosa: 916 kB iniciales y una *chunk* por pantalla*
 
 ---

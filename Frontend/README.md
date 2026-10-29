@@ -33,4 +33,4 @@ Se entra con un usuario del backend. Para la pantalla de insumos el usuario nece
 
 ## Bitácora
 
-El paso a paso, con decisiones, problemas y capturas, está en [bitacora-frontend.md](bitacora-frontend.md).
+El paso a paso, con decisiones, problemas y capturas, está en [bitacora-frontend.md](../bitacora-frontend.md), en la raíz del repositorio junto a `backend-iss.md`.
