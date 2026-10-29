@@ -109,6 +109,7 @@ La guía usa Angular 20. Se instaló Angular CLI 22, que es la versión vigente,
 | Avisos (toast) | `p-toast` en cada componente y `setTimeout` de 1 s antes de volver al listado | Un `p-toast` global en `app.html`; se vuelve al listado de inmediato | El aviso sobrevive al cambio de pantalla |
 | Rutas | Componentes importados directamente | `loadComponent` (carga perezosa) | Con la tabla y los formularios el paquete inicial pasó de 1 MB y el build falló (F-26) |
 | Permisos | No aplica | Rol RBAC `inventario` con GET, POST, PATCH y DELETE de insumos, asignado a `demo_front` | El backend niega todo por defecto (403) |
+| Nombre del proyecto | `frontend` | Se creó como `front-storelab-express-ii` y luego se renombró a `hornoraiz-frontend` (`package.json`, `angular.json`, README) | El primer nombre era el del proyecto de ejemplo del curso; las capturas anteriores al cambio lo muestran |
 | Capturas | no aplica | Movidas de `src/environments/evidencias-frontend/` a `Frontend/evidencias/` | No mezclar imágenes con el código fuente |
 
 ---
@@ -213,6 +214,8 @@ npx @angular/cli@22 new front-storelab-express-ii \
   --skip-git \
   --package-manager=npm
 ```
+
+> Después el proyecto se renombró a `hornoraiz-frontend` en `package.json`, `angular.json` y el README (ver sección 3). Por eso algunas capturas muestran el nombre anterior, por ejemplo `dist/front-storelab-express-ii`.
 
 `.postcssrc.json` generado (igual al de la guía):
 

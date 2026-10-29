@@ -6,7 +6,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "front-storelab-express-ii": {
+    "hornoraiz-frontend": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -54,10 +54,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "front-storelab-express-ii:build:production"
+              "buildTarget": "hornoraiz-frontend:build:production"
             },
             "development": {
-              "buildTarget": "front-storelab-express-ii:build:development"
+              "buildTarget": "hornoraiz-frontend:build:development"
             }
           },
           "defaultConfiguration": "development"
